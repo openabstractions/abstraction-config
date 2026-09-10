@@ -18,6 +18,7 @@ CFG-T2	an ignored file is said on stderr, never silently	nothing user-file malfo
 CFG-T3	a machine file an administrator did own is read	untestable: a driver running as an ordinary user cannot make a root- or Administrators-owned fixture, and the rule under test is what stops it reading its own
 CFG-E1	the environment is an override for one run, and an empty variable is not one	environment-over-user empty-is-not-an-override
 CFG-E2	a value taken from the environment is never observed to change	untestable: an absence, and no sequence of calls can observe a notice that is never sent
-CFG-W1	a subscription reports the answer when it differs, from whichever process wrote it, and names its mechanism	untestable: judged over wall time and across processes, which a transcript compared byte for byte cannot carry; held by config/go/watch_test.go and config/python/test_abstraction_config.py
+CFG-W1	a subscription reports the answer when it differs, from whichever process wrote it, and names its mechanism	untestable: the notice is judged over wall time and across processes, which a transcript compared byte for byte cannot carry; held by config/go/watch_test.go and config/python/test_abstraction_config.py. The comparison it leaves to the client is CFG-W2, and that half a transcript does carry
+CFG-W2	the stamp follows the answer, not the rung that gave it	stamp-follows-the-answer
 CFG-S1	a key the schema does not name is refused, not ignored	not built: nothing refuses an unknown key yet; both implementations ignore one today
 CFG-X1	no secret and no policy is a setting	untestable: a rule about what may be added to the schema, not about any answer
