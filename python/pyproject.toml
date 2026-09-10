@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "abstraction-config"
+version = "0.1.0"
+description = "What this machine has been told, and which authority said so. One answer per key, with its provenance."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.9"
+dependencies = ["abstraction-cas>=0.1,<0.2", "abstraction-watch>=0.1,<0.2"]
+
+[project.urls]
+Source = "https://github.com/openabstractions/abstraction-config"
+
+[tool.setuptools]
+py-modules = ["abstraction_config"]
