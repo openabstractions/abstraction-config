@@ -1,7 +1,10 @@
 # abstraction-config
 
-**In development.** A tag exists (`go/v0.2.0`) but no conformance scenario
-covers this layer yet, and the API carries no stability promise.
+**In development.** No conformance scenario covers this layer yet, and the API
+carries no stability promise. Tags exist and no version number is typed on this
+page: [the tag list](https://github.com/openabstractions/abstraction-config/tags)
+is the answer to "which release", because a tag is the only thing that cannot
+drift.
 
 A machine answers, from one file written once, which optional services it has,
 so no application is configured on its own.
@@ -35,9 +38,16 @@ layer.
 
 - **Go.** `go get github.com/openabstractions/abstraction-config/go`. The
   module path ends in `/go`; the package is `config`, so import it with an
-  explicit alias. The newest tag is `go/v0.2.0`; `@main` is the tree as it
-  stands.
-- **Python, C++.** None.
+  explicit alias.
+  [Releases, newest first](https://github.com/openabstractions/abstraction-config/tags);
+  pin the exact tag you tested against, or `@main` for the tree as it stands.
+- **Python.** Not on any index —
+  [what to install, import and call](python/README.md). It reads; it does not
+  write, so there is no `Save` there.
+- **C++.** None.
+
+Whether to adopt this at all, what it costs and what is not proven:
+[Adopting](CONTRIBUTING.md#adopting).
 
 ## Example
 
@@ -126,13 +136,13 @@ an existing `~/.modelget` directory if one is present, or `~/.abstraction`.
 
 ## Today
 
-Experimental, version 0.1.0. **Go only**, one file, consumed indirectly by
-`abstraction-model`.
+Experimental. **Go and Python**, one file each, consumed indirectly by
+`abstraction-model` and directly by `abstraction-download`.
 
-- No tests. The precedence rules described above are asserted by reading the
-  code, not by anything that runs.
-- No implementation in any other language, so a Python or C++ process on the
-  same machine cannot read the same file through this layer.
+- **The Python side reads and does not write.** There is no `Save` there, so a
+  machine is configured by the Go side or by a setup step.
+- **No C++ implementation**, so a C++ process on the same machine cannot read
+  the same file through this layer.
 - The field set is fixed and small. Adding a service means adding a field here,
   which is a poor fit for anything out of tree.
 - Nothing validates the values. A `Store` pointing at a path that does not exist
@@ -141,7 +151,11 @@ Experimental, version 0.1.0. **Go only**, one file, consumed indirectly by
 
 ## Conformance
 
-None. There is one implementation and no test of it.
+**None.** No scenario in the suite cites this layer, so it carries no verdict
+attributed to the conformance tree —
+[what is proven and what is not](https://openabstractions.org/coverage.html).
+Each implementation has its own tests; that is a weaker claim, and the two must
+not be read as one.
 
 ## Where it sits
 
