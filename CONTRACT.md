@@ -97,6 +97,21 @@ corpus, and untestable for the reason that makes [CFG-T1] worth having: a driver
 running as an ordinary user cannot create a root- or Administrators-owned
 fixture, because the rule under test is exactly what stops it writing one.
 
+**[CFG-T4] A write to the machine rung that no reader would trust is refused,
+and leaves nothing behind.** [CFG-T1] read from the writing side. Writing a file
+every reader ignores succeeds into silence — the tool reports the machine
+configured and the machine disagrees — and the directory matters more than the
+file: `C:\ProgramData` grants `BUILTIN\Users` `(CI)(WD,AD,WEA,WA)`, so whoever
+creates `%ProgramData%\abstraction` owns it and keeps it, and a machine rung
+whose directory an ordinary account owns can never be read by anybody again,
+including the administrator who installs afterwards. So an unprivileged write is
+what takes the rung away, and refusing it is what leaves an administrator
+somewhere to write.
+
+Ownership can be tried and not predicted — the same call is `Administrators`
+from an installer and the person from a shell — so the directory is created,
+asked who owns it, and removed again when the answer is wrong.
+
 ## The environment is an override for one run
 
 **[CFG-E1] The environment is an override for one run, and an empty variable is

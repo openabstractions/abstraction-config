@@ -310,6 +310,55 @@ func applyEnv(c Config) Config {
 	return c
 }
 
+// asAdministrator refuses a write to the machine rung that no reader would
+// trust, and leaves nothing behind when it refuses.
+//
+// read() ignores a machine file no administrator owns, so writing one anyway
+// succeeds into silence: the tool reports the machine configured and every
+// reader on it disagrees. The directory is worse than the file. %ProgramData%
+// grants BUILTIN\Users (CI)(WD,AD,WEA,WA), so whoever creates
+// %ProgramData%\abstraction owns it and keeps it, and a machine rung whose
+// directory an ordinary account owns can never be read again by anybody —
+// including the administrator who installs afterwards. An unprivileged write,
+// ours included, is what takes the rung away.
+//
+// Ownership can be tried and not predicted: the same MkdirAll is Administrators
+// when an installer runs it and the person when a shell does. So the directory
+// is made, asked who owns it, and unmade if the answer is wrong.
+func asAdministrator(path string, write func() error) error {
+	if path != MachinePath() {
+		return write()
+	}
+	dir := filepath.Dir(path)
+	_, err := os.Stat(dir)
+	fresh := os.IsNotExist(err)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	undo := func() {
+		if fresh {
+			os.Remove(dir)
+		}
+	}
+	refuse := func(why error) error {
+		undo()
+		return fmt.Errorf("abstraction: %s answers for every account on this machine, "+
+			"so only an administrator writes it: %w", path, why)
+	}
+	if err := trusted(dir); err != nil {
+		return refuse(err)
+	}
+	if err := write(); err != nil {
+		undo()
+		return err
+	}
+	if err := trusted(path); err != nil {
+		os.Remove(path)
+		return refuse(err)
+	}
+	return nil
+}
+
 // Save writes a configuration to path, creating the directory. This is what a
 // setup step calls — once per machine — so that every application afterwards
 // needs to know nothing.
@@ -317,14 +366,17 @@ func Save(path string, c Config) error {
 	if strings.TrimSpace(path) == "" {
 		return errors.New("abstraction: no path to save to")
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
 	b, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
 		return err
 	}
-	if err := cas.Change(path, func([]byte) ([]byte, error) { return append(b, '\n'), nil }); err != nil {
+	err = asAdministrator(path, func() error {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return err
+		}
+		return cas.Change(path, func([]byte) ([]byte, error) { return append(b, '\n'), nil })
+	})
+	if err != nil {
 		return err
 	}
 	announce()
@@ -342,24 +394,26 @@ func Edit(path string, change func(*Config) error) error {
 	if strings.TrimSpace(path) == "" {
 		return errors.New("abstraction: no path to edit")
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	err := cas.Change(path, func(cur []byte) ([]byte, error) {
-		var c Config
-		if len(cur) > 0 {
-			if err := json.Unmarshal(cur, &c); err != nil {
-				return nil, fmt.Errorf("abstraction: %s is not readable, so it will not be overwritten: %w", path, err)
+	err := asAdministrator(path, func() error {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return err
+		}
+		return cas.Change(path, func(cur []byte) ([]byte, error) {
+			var c Config
+			if len(cur) > 0 {
+				if err := json.Unmarshal(cur, &c); err != nil {
+					return nil, fmt.Errorf("abstraction: %s is not readable, so it will not be overwritten: %w", path, err)
+				}
 			}
-		}
-		if err := change(&c); err != nil {
-			return nil, err
-		}
-		b, err := json.MarshalIndent(c, "", "  ")
-		if err != nil {
-			return nil, err
-		}
-		return append(b, '\n'), nil
+			if err := change(&c); err != nil {
+				return nil, err
+			}
+			b, err := json.MarshalIndent(c, "", "  ")
+			if err != nil {
+				return nil, err
+			}
+			return append(b, '\n'), nil
+		})
 	})
 	if err != nil {
 		return err
