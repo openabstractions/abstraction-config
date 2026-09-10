@@ -1,0 +1,7 @@
+01 user {"store":"A","log_sink":"L"} -> ok
+02 env store B -> ok
+03 load -> ok store=B/environment log_sink=L/user
+04 key store -> ok value=B from=environment
+05 key log_sink -> ok value=L from=user
+06 env store - -> ok
+07 load -> ok store=A/user log_sink=L/user

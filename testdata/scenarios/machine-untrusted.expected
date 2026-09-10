@@ -1,0 +1,6 @@
+01 noise -> ok silent
+02 machine {"store":"M"} -> ok
+03 load -> ok -
+04 noise -> ok said
+05 user {"store":"A"} -> ok
+06 load -> ok store=A/user

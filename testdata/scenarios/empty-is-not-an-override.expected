@@ -1,0 +1,4 @@
+01 user {"store":"A"} -> ok
+02 env store empty -> ok
+03 load -> ok store=A/user
+04 key store -> ok value=A from=user

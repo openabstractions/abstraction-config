@@ -1,0 +1,8 @@
+01 stamp -> ok first
+02 user {"store":"A"} -> ok
+03 stamp -> ok differs
+04 stamp -> ok same
+05 env store A -> ok
+06 stamp -> ok same
+07 env store B -> ok
+08 stamp -> ok differs

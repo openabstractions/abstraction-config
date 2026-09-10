@@ -1,0 +1,16 @@
+# requires: machine
+# A machine-wide file this ordinary process could write is a machine-wide file
+# anyone could write, so it is not read. The file stays where it is; being
+# ignored is not being deleted.
+noise
+# expect 1: ok silent [CFG-T2]
+machine {"store":"M"}
+# expect 2: ok
+load
+# expect 3: ok - [CFG-T1]
+noise
+# expect 4: ok said [CFG-T1] [CFG-T2]
+user {"store":"A"}
+# expect 5: ok
+load
+# expect 6: ok store=A/user [CFG-R1] [CFG-T1]

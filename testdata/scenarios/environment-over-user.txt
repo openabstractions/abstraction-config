@@ -1,0 +1,17 @@
+# The run rung beats the user rung, and only for the key it names. Taking the
+# variable away gives the file its key back, which is what makes it an override
+# for one run rather than an edit.
+user {"store":"A","log_sink":"L"}
+# expect 1: ok
+env store B
+# expect 2: ok
+load
+# expect 3: ok store=B/environment log_sink=L/user [CFG-R1] [CFG-E1]
+key store
+# expect 4: ok value=B from=environment [CFG-E1]
+key log_sink
+# expect 5: ok value=L from=user [CFG-P1]
+env store -
+# expect 6: ok
+load
+# expect 7: ok store=A/user log_sink=L/user [CFG-E1]

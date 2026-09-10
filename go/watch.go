@@ -196,8 +196,8 @@ func announce() {
 func watchable() []string {
 	seen := map[string]bool{}
 	var out []string
-	for _, p := range searchPaths() {
-		d := filepath.Dir(p)
+	for _, s := range searchPaths() {
+		d := filepath.Dir(s.path)
 		if seen[d] {
 			continue
 		}

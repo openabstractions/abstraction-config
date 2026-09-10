@@ -1,5 +1,8 @@
 # abstraction-config
 
+**In development.** A tag exists (`go/v0.2.0`) but no conformance scenario
+covers this layer yet, and the API carries no stability promise.
+
 A machine answers, from one file written once, which optional services it has,
 so no application is configured on its own.
 
@@ -32,7 +35,7 @@ layer.
 
 - **Go.** `go get github.com/openabstractions/abstraction-config/go`. The
   module path ends in `/go`; the package is `config`, so import it with an
-  explicit alias. The newest tag is `go/v0.1.0`; `@main` is the tree as it
+  explicit alias. The newest tag is `go/v0.2.0`; `@main` is the tree as it
   stands.
 - **Python, C++.** None.
 

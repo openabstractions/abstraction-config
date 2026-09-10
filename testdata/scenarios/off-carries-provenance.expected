@@ -1,0 +1,3 @@
+01 user {"store":"A","off":{"nas":"the share is gone"}} -> ok
+02 load -> ok store=A/user off=nas/user
+03 key off -> ok value=nas from=user

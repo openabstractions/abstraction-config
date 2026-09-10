@@ -1,0 +1,11 @@
+# A variable set to nothing is not an override. A shell exports empty strings
+# for variables nobody set, and a rung that took them would silently unconfigure
+# every machine that has one.
+user {"store":"A"}
+# expect 1: ok
+env store empty
+# expect 2: ok
+load
+# expect 3: ok store=A/user [CFG-E1]
+key store
+# expect 4: ok value=A from=user [CFG-E1]

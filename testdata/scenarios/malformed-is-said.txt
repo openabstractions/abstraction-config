@@ -1,0 +1,17 @@
+# A file that will not parse does not take the application down and does not
+# pass unmentioned either: the whole point of this layer is that somebody can
+# find out why a tier is not being used.
+noise
+# expect 1: ok silent [CFG-T2]
+user this is not json
+# expect 2: ok
+load
+# expect 3: ok - [CFG-T2]
+noise
+# expect 4: ok said [CFG-T2]
+key store
+# expect 5: ok value= from=default [CFG-P1]
+user {"store":"A"}
+# expect 6: ok
+load
+# expect 7: ok store=A/user [CFG-P1]

@@ -1,0 +1,19 @@
+# The stamp is about the answer and not about where it came from. A process
+# running for days asks for it rather than rebuilding everything, so a stamp
+# that moved when only the rung moved would rebuild for nothing.
+stamp
+# expect 1: ok first
+user {"store":"A"}
+# expect 2: ok
+stamp
+# expect 3: ok differs
+stamp
+# expect 4: ok same
+env store A
+# expect 5: ok
+stamp
+# expect 6: ok same
+env store B
+# expect 7: ok
+stamp
+# expect 8: ok differs

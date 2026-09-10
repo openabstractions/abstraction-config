@@ -79,10 +79,55 @@ type Config struct {
 	// the switch is obeyed by the next job and nothing restarts.
 	Off map[string]string `json:"off,omitempty"`
 
-	// From records which file this came from, for diagnostics. A user who cannot
-	// work out why their downloads are going somewhere unexpected needs to be
-	// able to find the file that says so.
-	From string `json:"-"`
+	// Origins records, for each key, which rung answered and which file said so.
+	//
+	// Per key rather than per struct, because a machine that sets nas_store in
+	// the machine file and store in the user file has two answers from two
+	// authorities, and one string for the whole struct can only name one of
+	// them. A user who cannot work out why their downloads are going somewhere
+	// unexpected needs the file that says so for the key they are asking about.
+	Origins map[string]Origin `json:"-"`
+}
+
+// Origin is which authority answered for one key. Rung is machine, user,
+// environment or default; Path is the file, and is empty for the last two.
+type Origin struct {
+	Rung string
+	Path string
+}
+
+func (o Origin) String() string {
+	if o.Path == "" {
+		return o.Rung
+	}
+	return o.Rung + " file " + o.Path
+}
+
+// The rungs, farthest first. A site rung is reserved and absent.
+const (
+	Machine     = "machine"
+	User        = "user"
+	Environment = "environment"
+	Default     = "default"
+)
+
+// Keys is every key in this schema, in the order Describe prints them.
+var Keys = []string{"nas_store", "store", "log_sink", "log_service", "off"}
+
+// Origin answers for one key. A key nothing set came from the default, which is
+// an answer and not a missing one.
+func (c Config) Origin(key string) Origin {
+	if o, ok := c.Origins[key]; ok {
+		return o
+	}
+	return Origin{Rung: Default}
+}
+
+func (c *Config) from(key, rung, path string) {
+	if c.Origins == nil {
+		c.Origins = map[string]Origin{}
+	}
+	c.Origins[key] = Origin{Rung: rung, Path: path}
 }
 
 // Overridden names the fields the environment is deciding, whatever any file
@@ -91,9 +136,9 @@ type Config struct {
 // for one level down.
 func Overridden() []string {
 	var out []string
-	for _, field := range []string{"nas_store", "store", "log_sink", "log_service"} {
-		if os.Getenv(EnvVars[field]) != "" {
-			out = append(out, field)
+	for _, key := range Keys {
+		if EnvVars[key] != "" && os.Getenv(EnvVars[key]) != "" {
+			out = append(out, key)
 		}
 	}
 	sort.Strings(out)
@@ -104,7 +149,6 @@ func Overridden() []string {
 // days asks for it rather than rebuilding everything to find out whether it
 // needs to.
 func (c Config) Stamp() string {
-	c.From = ""
 	b, err := json.Marshal(c)
 	if err != nil {
 		return ""
@@ -131,12 +175,9 @@ var EnvVars = map[string]string{
 // has to handle.
 func Load() Config {
 	var c Config
-	for _, path := range searchPaths() {
-		if loaded, err := read(path); err == nil {
+	for _, s := range searchPaths() {
+		if loaded, err := read(s.path, s.rung); err == nil {
 			c = merge(c, loaded)
-			if c.From == "" {
-				c.From = path
-			}
 		}
 	}
 	return applyEnv(c)
@@ -168,20 +209,25 @@ func MachinePath() string {
 	return filepath.Join("/etc", Name, "config.json")
 }
 
+type source struct {
+	path string
+	rung string
+}
+
 // searchPaths returns files in increasing order of precedence, so later entries
 // win.
-func searchPaths() []string {
-	var out []string
+func searchPaths() []source {
+	var out []source
 	if p := MachinePath(); p != "" {
-		out = append(out, p)
+		out = append(out, source{p, Machine})
 	}
 	if p := UserPath(); p != "" {
-		out = append(out, p)
+		out = append(out, source{p, User})
 	}
 	return out
 }
 
-func read(path string) (Config, error) {
+func read(path, rung string) (Config, error) {
 	b, err := cas.Read(path)
 	if err != nil {
 		return Config{}, err
@@ -189,7 +235,7 @@ func read(path string) (Config, error) {
 	if b == nil {
 		return Config{}, os.ErrNotExist
 	}
-	if path == MachinePath() {
+	if rung == Machine {
 		if err := trusted(path); err != nil {
 			fmt.Fprintf(os.Stderr, "abstraction: ignoring %s: %v\n", path, err)
 			return Config{}, err
@@ -203,44 +249,63 @@ func read(path string) (Config, error) {
 		fmt.Fprintf(os.Stderr, "abstraction: ignoring %s: %v\n", path, err)
 		return Config{}, err
 	}
-	c.From = path
+	for _, key := range Keys {
+		if c.set(key) {
+			c.from(key, rung, path)
+		}
+	}
 	return c, nil
 }
 
+// text is the four keys whose value is one string. Off is the fifth key and is
+// a map, so it is handled beside them rather than through this.
+func (c *Config) text(key string) *string {
+	switch key {
+	case "nas_store":
+		return &c.NASStore
+	case "store":
+		return &c.Store
+	case "log_sink":
+		return &c.LogSink
+	case "log_service":
+		return &c.LogService
+	}
+	return nil
+}
+
+func (c *Config) set(key string) bool {
+	if p := c.text(key); p != nil {
+		return *p != ""
+	}
+	return len(c.Off) > 0
+}
+
 func merge(base, over Config) Config {
-	if over.NASStore != "" {
-		base.NASStore = over.NASStore
-	}
-	if over.Store != "" {
-		base.Store = over.Store
-	}
-	if over.LogSink != "" {
-		base.LogSink = over.LogSink
-	}
-	if over.LogService != "" {
-		base.LogService = over.LogService
-	}
-	if len(over.Off) > 0 {
-		base.Off = over.Off
-	}
-	if over.From != "" {
-		base.From = over.From
+	for _, key := range Keys {
+		if !over.set(key) {
+			continue
+		}
+		if p := over.text(key); p != nil {
+			*base.text(key) = *p
+		} else {
+			base.Off = over.Off
+		}
+		o := over.Origin(key)
+		base.from(key, o.Rung, o.Path)
 	}
 	return base
 }
 
 func applyEnv(c Config) Config {
-	if v := os.Getenv(EnvVars["nas_store"]); v != "" {
-		c.NASStore, c.From = v, "environment"
-	}
-	if v := os.Getenv(EnvVars["store"]); v != "" {
-		c.Store, c.From = v, "environment"
-	}
-	if v := os.Getenv(EnvVars["log_sink"]); v != "" {
-		c.LogSink, c.From = v, "environment"
-	}
-	if v := os.Getenv(EnvVars["log_service"]); v != "" {
-		c.LogService, c.From = v, "environment"
+	for _, key := range Keys {
+		p := c.text(key)
+		if p == nil {
+			continue
+		}
+		if v := os.Getenv(EnvVars[key]); v != "" {
+			*p = v
+			c.from(key, Environment, "")
+		}
 	}
 	return c
 }
@@ -308,22 +373,24 @@ func Edit(path string, change func(*Config) error) error {
 // going somewhere they did not expect.
 func (c Config) Describe() string {
 	var b strings.Builder
-	if c.From == "" {
+	if len(c.Origins) == 0 {
 		return "no configuration found; only built-in tiers are available"
 	}
-	fmt.Fprintf(&b, "from %s\n", c.From)
 	for _, kv := range [][2]string{
-		{"nas store", c.NASStore},
-		{"local store", c.Store},
-		{"log sink", c.LogSink},
-		{"log service", c.LogService},
+		{"nas_store", c.NASStore},
+		{"store", c.Store},
+		{"log_sink", c.LogSink},
+		{"log_service", c.LogService},
 	} {
 		if kv[1] != "" {
-			fmt.Fprintf(&b, "  %-12s %s\n", kv[0], kv[1])
+			fmt.Fprintf(&b, "  %-12s %s\n%-14s from %s\n", kv[0], kv[1], "", c.Origin(kv[0]))
 		}
 	}
 	for _, name := range sorted(c.Off) {
 		fmt.Fprintf(&b, "  %-12s off — %s\n", name, c.Off[name])
+	}
+	if len(c.Off) > 0 {
+		fmt.Fprintf(&b, "%-14s from %s\n", "", c.Origin("off"))
 	}
 	if over := Overridden(); len(over) > 0 {
 		fmt.Fprintf(&b, "\nthe environment is deciding %s, whatever this file says\n",

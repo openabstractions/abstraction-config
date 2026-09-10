@@ -1,0 +1,5 @@
+01 user {"store":"A","log_sink":"L"} -> ok
+02 load -> ok store=A/user log_sink=L/user
+03 key store -> ok value=A from=user
+04 key log_service -> ok value= from=default
+05 noise -> ok silent

@@ -1,0 +1,15 @@
+# One variable set does not make every key come from the environment. Before
+# provenance was per key this scenario answered from=environment for all three,
+# and a person following it went looking for a variable that decides nothing.
+user {"store":"A","log_sink":"L","log_service":"S"}
+# expect 1: ok
+env store B
+# expect 2: ok
+load
+# expect 3: ok store=B/environment log_sink=L/user log_service=S/user [CFG-P1]
+key log_sink
+# expect 4: ok value=L from=user [CFG-P1]
+key log_service
+# expect 5: ok value=S from=user [CFG-P1]
+key store
+# expect 6: ok value=B from=environment [CFG-P1]

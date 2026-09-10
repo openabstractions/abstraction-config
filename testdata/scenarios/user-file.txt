@@ -1,0 +1,12 @@
+# What this user set up. Two keys answered, two keys still on the default, and
+# the answer says which is which.
+user {"store":"A","log_sink":"L"}
+# expect 1: ok
+load
+# expect 2: ok store=A/user log_sink=L/user [CFG-P1]
+key store
+# expect 3: ok value=A from=user [CFG-P1]
+key log_service
+# expect 4: ok value= from=default [CFG-P1]
+noise
+# expect 5: ok silent [CFG-T2]

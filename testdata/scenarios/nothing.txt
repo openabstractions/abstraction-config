@@ -1,0 +1,10 @@
+# A machine nobody has configured. Absent is an answer, not a missing one, and
+# the answer is the default rung.
+load
+# expect 1: ok - [CFG-P1]
+key store
+# expect 2: ok value= from=default [CFG-P1]
+key nas_store
+# expect 3: ok value= from=default [CFG-P1]
+noise
+# expect 4: ok silent [CFG-T2]
