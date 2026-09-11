@@ -17,14 +17,67 @@ func own(t *testing.T) string {
 	if runtime.GOOS == "windows" {
 		t.Setenv("APPDATA", dir)
 		t.Setenv("ProgramData", filepath.Join(dir, "machine"))
+	} else if runtime.GOOS == "darwin" {
+		t.Setenv("HOME", dir)
 	} else {
 		t.Setenv("XDG_CONFIG_HOME", dir)
 	}
 	path := UserPath()
+	if rel, err := filepath.Rel(dir, path); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		t.Fatalf("user configuration escaped test home: %s", path)
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	return path
+}
+
+func TestExistingFileEditsSurviveReplacementAndDeletion(t *testing.T) {
+	path := own(t)
+	write := func(at, value string) {
+		t.Helper()
+		if err := os.WriteFile(at, []byte(`{"store":"`+value+`"}`+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Seed before subscribing: directory-only kqueue watches cannot detect the
+	// following in-place write to an already-existing inode.
+	write(path, "initial")
+	s, ch := attach(t)
+	if notifier != "" && !strings.HasPrefix(s.How(), notifier) {
+		t.Fatalf("native watcher unavailable: %s", s.How())
+	}
+	expect := func(value string) {
+		t.Helper()
+		if got := told(t, s, ch).Store; got != value {
+			t.Fatalf("got %q, want %q via %s", got, value, s.How())
+		}
+	}
+	write(path, "in-place")
+	expect("in-place")
+	// The replacement must be watched by its new inode, not the old handle.
+	replacement := path + ".new"
+	write(replacement, "replacement")
+	if err := os.Rename(replacement, path); err != nil {
+		t.Fatal(err)
+	}
+	expect("replacement")
+	write(path, "replacement-edited")
+	expect("replacement-edited")
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	expect(Load().Store)
+	write(path, "recreated")
+	expect("recreated")
+	write(path, "recreated-edited")
+	expect("recreated-edited")
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // attach subscribes and takes the opening notice, which is the present rather

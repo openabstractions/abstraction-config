@@ -1,0 +1,2 @@
+# Recorded wire transcripts must survive checkout byte-for-byte.
+testdata/scenarios/*.expected -text
