@@ -1,6 +1,6 @@
 """Apply a config scenario and print what an observer saw.
 
-conformance/DRIVER.md is the contract; config/testdata/scenarios holds the
+conformance/DRIVER.md is the contract; abstraction-config/testdata/scenarios holds the
 corpus, and the transcript this prints is compared with the Go driver's byte
 for byte.
 
@@ -15,7 +15,7 @@ import sys
 
 for _sibling in ("cas", "watch"):
     sys.path.insert(0, os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "..", "..", _sibling, "python"))
+        os.path.dirname(os.path.abspath(__file__)), "..", "..", "abstraction-" + _sibling, "python"))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import abstraction_config as config

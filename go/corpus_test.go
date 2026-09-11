@@ -10,9 +10,9 @@ import (
 	"testing"
 )
 
-// The corpus is the cross-language instrument: config/testdata/scenarios holds
+// The corpus is the cross-language instrument: abstraction-config/testdata/scenarios holds
 // a scenario and the transcript an observer should see, and the Go driver here
-// and config/python/driver.py must each print those bytes. Two languages that
+// and abstraction-config/python/driver.py must each print those bytes. Two languages that
 // match one recorded file match each other, and the file also pins the answer,
 // which two transcripts diffed against each other never do.
 

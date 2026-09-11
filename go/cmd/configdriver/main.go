@@ -1,5 +1,5 @@
 // configdriver applies a config scenario and prints what an observer saw.
-// conformance/DRIVER.md is the contract; config/testdata/scenarios holds the
+// conformance/DRIVER.md is the contract; abstraction-config/testdata/scenarios holds the
 // corpus, and the transcript this prints is compared with the Python driver's
 // byte for byte.
 package main

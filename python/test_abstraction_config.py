@@ -10,7 +10,7 @@ import unittest
 # subscription the rest of the tree uses.
 for _sibling in ("cas", "watch"):
     sys.path.insert(0, os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "..", "..", _sibling, "python"))
+        os.path.dirname(os.path.abspath(__file__)), "..", "..", "abstraction-" + _sibling, "python"))
 
 import abstraction_config as config
 

@@ -4,22 +4,22 @@
 >
 >   <tag>  <the rule>  <scenario ... | untestable: why | not built: why>
 >
-> The scenarios beside this file are read by config/go/corpus_test.go and by
-> config/python/test_corpus.py; each language's transcript is compared with the
+> The scenarios beside this file are read by abstraction-config/go/corpus_test.go and by
+> abstraction-config/python/test_corpus.py; each language's transcript is compared with the
 > recorded .expected byte for byte, so the two languages agree through it.
 
 CFG-R1	the nearer rung wins: run over user over machine	environment-over-user machine-untrusted
 CFG-R2	a site rung is reserved and absent	untestable: an absent rung answers nothing, so no operation tells "reserved" from "never thought of"
 CFG-R3	a farther rung may lock a key against a nearer one	not built: no rung can lock a key yet, so there is nothing to reach
 CFG-P1	every answer carries provenance per key: a rung and a path, or environment, or default	nothing user-file environment-over-user provenance-is-per-key off-carries-provenance malformed-is-said
-CFG-P2	the path half of provenance names the file that answered	untestable: a path is one machine's, so no transcript two machines compare can carry it; held by config/go/config_test.go and config/python/test_abstraction_config.py
+CFG-P2	the path half of provenance names the file that answered	untestable: a path is one machine's, so no transcript two machines compare can carry it; held by abstraction-config/go/config_test.go and abstraction-config/python/test_abstraction_config.py
 CFG-T1	the machine rung is read only when an administrator owns the file and its directory, and an untrusted file is ignored rather than obeyed	machine-untrusted
 CFG-T2	an ignored file is said on stderr, never silently	nothing user-file malformed-is-said machine-untrusted
 CFG-T3	a machine file an administrator did own is read	untestable: a driver running as an ordinary user cannot make a root- or Administrators-owned fixture, and the rule under test is what stops it reading its own
-CFG-T4	a write to the machine rung that no reader would trust is refused, and leaves nothing behind	untestable: the corpus is one transcript both languages print and only the Go half of this layer writes; held by config/go/trust_test.go, which says UNPROVEN on stderr where the machine rung is /etc
+CFG-T4	a write to the machine rung that no reader would trust is refused, and leaves nothing behind	untestable: the corpus is one transcript both languages print and only the Go half of this layer writes; held by abstraction-config/go/trust_test.go, which says UNPROVEN on stderr where the machine rung is /etc
 CFG-E1	the environment is an override for one run, and an empty variable is not one	environment-over-user empty-is-not-an-override
 CFG-E2	a value taken from the environment is never observed to change	untestable: an absence, and no sequence of calls can observe a notice that is never sent
-CFG-W1	a subscription reports the answer when it differs, from whichever process wrote it, and names its mechanism	untestable: the notice is judged over wall time and across processes, which a transcript compared byte for byte cannot carry; held by config/go/watch_test.go and config/python/test_abstraction_config.py. The comparison it leaves to the client is CFG-W2, and that half a transcript does carry
+CFG-W1	a subscription reports the answer when it differs, from whichever process wrote it, and names its mechanism	untestable: the notice is judged over wall time and across processes, which a transcript compared byte for byte cannot carry; held by abstraction-config/go/watch_test.go and abstraction-config/python/test_abstraction_config.py. The comparison it leaves to the client is CFG-W2, and that half a transcript does carry
 CFG-W2	the stamp follows the answer, not the rung that gave it	stamp-follows-the-answer
 CFG-S1	a key the schema does not name is refused, not ignored	not built: nothing refuses an unknown key yet; both implementations ignore one today
 CFG-X1	no secret and no policy is a setting	untestable: a rule about what may be added to the schema, not about any answer

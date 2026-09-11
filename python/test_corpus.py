@@ -1,7 +1,7 @@
 """The Python half of the cross-language corpus.
 
-config/testdata/scenarios holds a scenario and the transcript an observer
-should see. driver.py must print those bytes, and config/go/corpus_test.go
+abstraction-config/testdata/scenarios holds a scenario and the transcript an observer
+should see. driver.py must print those bytes, and abstraction-config/go/corpus_test.go
 demands the same of the Go driver, so the two languages agree through the file
 rather than through a diff of two runs nobody recorded.
 """
@@ -16,7 +16,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SCENARIOS = os.path.join(HERE, "..", "testdata", "scenarios")
 
 for _sibling in ("cas", "watch"):
-    sys.path.insert(0, os.path.join(HERE, "..", "..", _sibling, "python"))
+    sys.path.insert(0, os.path.join(HERE, "..", "..", "abstraction-" + _sibling, "python"))
 
 import abstraction_config as config
 import driver

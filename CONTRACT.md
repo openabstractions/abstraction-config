@@ -70,7 +70,7 @@ distinguishes `g_settings_get_user_value` from `g_settings_get_default_value` pe
 key ([GSettings](https://docs.gtk.org/gio/class.Settings.html)).
 
 **[CFG-P2] The path half of provenance names the file that answered.** Held by
-`config/go/config_test.go` and `config/python/test_abstraction_config.py` rather
+`abstraction-config/go/config_test.go` and `abstraction-config/python/test_abstraction_config.py` rather
 than by the corpus: a path is one machine's, so no transcript two machines
 compare byte for byte can carry it.
 
@@ -137,8 +137,8 @@ sequence of calls can observe a notice that is never sent.
 **[CFG-W1] A subscription reports the answer when it differs, from whichever
 process wrote it, and names its mechanism.** A platform that must be asked on a
 timer says so rather than hiding it in a latency. Held over wall time and across
-processes by `config/go/watch_test.go` and
-`config/python/test_abstraction_config.py`; a transcript compared byte for byte
+processes by `abstraction-config/go/watch_test.go` and
+`abstraction-config/python/test_abstraction_config.py`; a transcript compared byte for byte
 carries neither, so the corpus reaches the comparison half only, as [CFG-W2].
 
 Every ancestor splits the two paths and none of them promises what changed.
@@ -167,7 +167,7 @@ only provenance moved would make it rebuild for nothing. This is the comparison
 both implementations ignore an unknown key today. The schema is closed, and its
 ancestor is GSettings, where "you have to specify a schema that describes the
 keys in your settings and their types and default values". Its home is this
-layer's one definition in the IDL profile, the same way `job/job.thrift` is the
+layer's one definition in the IDL profile, the same way `abstraction-job/job.thrift` is the
 job layer's.
 
 **[CFG-X1] No secret and no policy is a setting.** Nobody is refused a read and
@@ -211,7 +211,7 @@ is unreached. Full accounting, never full coverage — a rule no sequence of dri
 operations can detect says so there with its reason, and a rule nothing
 implements yet says that.
 
-`config/go/corpus_test.go` and `config/python/test_corpus.py` read the scenarios
+`abstraction-config/go/corpus_test.go` and `abstraction-config/python/test_corpus.py` read the scenarios
 beside that file and compare each language's transcript with the recorded
 `.expected` byte for byte, so the two languages agree through it. The same tests
 refuse a tag no rule names and a covered rule no expectation cites.
@@ -219,6 +219,6 @@ refuse a tag no rule names and a covered rule no expectation cites.
 ## Tested
 
 ```bash
-cd config/go && go test ./...
-cd config/python && python -m unittest discover -p 'test_*.py'
+(cd go && go test ./...)
+(cd python && python -m unittest discover -p 'test_*.py')
 ```
