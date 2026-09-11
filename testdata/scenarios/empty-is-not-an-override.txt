@@ -2,9 +2,9 @@
 # for variables nobody set, and a rung that took them would silently unconfigure
 # every machine that has one.
 user {"store":"A"}
-# expect 1: ok
+# setup 1: ok
 env store empty
-# expect 2: ok
+# setup 2: ok
 load
 # expect 3: ok store=A/user [CFG-E1]
 key store

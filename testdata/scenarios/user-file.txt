@@ -1,7 +1,7 @@
 # What this user set up. Two keys answered, two keys still on the default, and
 # the answer says which is which.
 user {"store":"A","log_sink":"L"}
-# expect 1: ok
+# setup 1: ok
 load
 # expect 2: ok store=A/user log_sink=L/user [CFG-P1]
 key store

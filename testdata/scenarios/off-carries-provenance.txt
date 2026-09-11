@@ -1,7 +1,7 @@
 # A tier switched off is a key like any other and carries where it came from,
 # because "who turned this off" is exactly the question a person asks about it.
 user {"store":"A","off":{"nas":"the share is gone"}}
-# expect 1: ok
+# setup 1: ok
 load
 # expect 2: ok store=A/user off=nas/user [CFG-P1]
 key off
