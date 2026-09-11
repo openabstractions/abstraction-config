@@ -1,13 +1,27 @@
 # abstraction-config
 
-**In development.** No conformance scenario covers this layer yet, and the API
-carries no stability promise. Tags exist and no version number is typed on this
+**Development API.** The service client reads configuration without opening
+configuration files in the application. Tags exist and no version number is typed on this
 page: [the tag list](https://github.com/openabstractions/abstraction-config/tags)
 is the answer to "which release", because a tag is the only thing that cannot
 drift.
 
-A machine answers, from one file written once, which optional services it has,
-so no application is configured on its own.
+A configuration service answers which optional services are configured, with
+the origin of each value. The service owns access to machine and user files;
+an application may supply its own explicit overrides for that call.
+
+## Service client
+
+Run `openabstractions serve config` under the user's account. Go clients call
+`github.com/openabstractions/abstraction-config/go/client`'s `Discover().Read()`;
+C++ clients use `abstraction::config::Client{}.Read()`. Both use the same generated
+protocol. See [C++](cpp/README.md) for CMake setup.
+
+The service accepts only the same user. Client overrides are configuration
+claims, never authorization. The host's environment does not silently replace
+the caller's. A missing service returns an error; clients do not fall back to
+reading files. `ABSTRACTION_CONFIG_ENDPOINT` selects a nondefault endpoint.
+The original `Load` provider described below remains available separately.
 
 ## The problem
 
@@ -31,8 +45,8 @@ is a normal answer.
 | **environment** | overrides both, field by field, for a test or a one-off run |
 | **`From`** | where each value came from; not serialised |
 
-No rule on this page carries a tag, and no conformance scenario cites this
-layer.
+The [contract](CONTRACT.md) and checked-in scenarios define the existing
+configuration behavior. Service checks report their narrower IPC scope.
 
 ## Obtain
 
@@ -44,7 +58,8 @@ layer.
 - **Python.** Not on any index —
   [what to install, import and call](python/README.md). It reads; it does not
   write, so there is no `Save` there.
-- **C++.** None.
+- **C++.** [Generated interface and service client](cpp/README.md), using the
+  shared IPC runtime and a Go service.
 
 Whether to adopt this at all, what it costs and what is not proven:
 [Adopting](CONTRIBUTING.md#adopting).

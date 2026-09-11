@@ -173,14 +173,23 @@ var EnvVars = map[string]string{
 // Load returns the machine's configuration. It never fails: a machine with
 // nothing set up is a machine with no extra tiers, which every caller already
 // has to handle.
-func Load() Config {
+func Load() Config { return load(os.Getenv) }
+
+// LoadWithOverrides reads the existing file providers, then applies only the
+// supplied run overrides keyed by existing environment variable names. It never
+// reads the service process's ABSTRACTION_* values on behalf of another caller.
+func LoadWithOverrides(values map[string]string) Config {
+	return load(func(name string) string { return values[name] })
+}
+
+func load(environment func(string) string) Config {
 	var c Config
 	for _, s := range searchPaths() {
 		if loaded, err := read(s.path, s.rung); err == nil {
 			c = merge(c, loaded)
 		}
 	}
-	return applyEnv(c)
+	return applyEnvironment(c, environment)
 }
 
 // UserPath is where a per-user configuration belongs on this OS, following the
@@ -296,13 +305,15 @@ func merge(base, over Config) Config {
 	return base
 }
 
-func applyEnv(c Config) Config {
+func applyEnv(c Config) Config { return applyEnvironment(c, os.Getenv) }
+
+func applyEnvironment(c Config, environment func(string) string) Config {
 	for _, key := range Keys {
 		p := c.text(key)
 		if p == nil {
 			continue
 		}
-		if v := os.Getenv(EnvVars[key]); v != "" {
+		if v := environment(EnvVars[key]); v != "" {
 			*p = v
 			c.from(key, Environment, "")
 		}
