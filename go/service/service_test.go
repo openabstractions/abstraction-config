@@ -7,9 +7,11 @@ import (
 	config "github.com/openabstractions/abstraction-config/go"
 	wire "github.com/openabstractions/abstraction-config/go/abstraction/config"
 	"github.com/openabstractions/abstraction-config/go/client"
+	identity "github.com/openabstractions/abstraction-identity"
 	"github.com/openabstractions/abstraction-identity/listen"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -55,6 +57,7 @@ func host(t *testing.T, configure ...func(*Host)) (*Host, *client.Client) {
 	return h, client.New(endpoint)
 }
 func TestReadExistingProviderAndExplicitRun(t *testing.T) {
+	requireProgramProof(t)
 	isolated(t)
 	path := config.UserPath()
 	want := config.Config{Store: "user-store", NASStore: "user-nas", LogSink: "user-log", LogService: "user-service", Off: map[string]string{"nas": "maintenance"}}
@@ -91,6 +94,7 @@ func TestReadExistingProviderAndExplicitRun(t *testing.T) {
 	}
 }
 func TestWrongUserRefusedBeforeProvider(t *testing.T) {
+	requireProgramProof(t)
 	isolated(t)
 	var reads atomic.Int32
 	_, c := host(t, func(h *Host) {
@@ -114,6 +118,7 @@ func (a addingUnknown) ExchangeFrame(frame []byte) ([]byte, error) {
 	return a.inner.ExchangeFrame([]byte(text))
 }
 func TestUnknownFieldRefusedBeforeProvider(t *testing.T) {
+	requireProgramProof(t)
 	isolated(t)
 	var reads atomic.Int32
 	endpoint := listen.Endpoint(fmt.Sprintf("config-refusal-%d-%d", os.Getpid(), serial.Add(1)))
@@ -143,6 +148,7 @@ func TestAbsentDoesNotFallback(t *testing.T) {
 	}
 }
 func TestMalformedSourceUsesProviderFallback(t *testing.T) {
+	requireProgramProof(t)
 	isolated(t)
 	path := config.UserPath()
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
@@ -159,5 +165,39 @@ func TestMalformedSourceUsesProviderFallback(t *testing.T) {
 	expected := config.LoadWithOverrides(nil)
 	if got.Stamp != expected.Stamp() || got.Origins.Store.Rung != expected.Origin("store").Rung {
 		t.Fatalf("provider fallback changed: %+v", got)
+	}
+}
+
+func requireProgramProof(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "darwin" {
+		t.Skip("UNPROVEN successful calls: Darwin cannot meet Program process/path proof; TestInsufficientProofRefusesBeforeProvider covers refusal")
+	}
+}
+
+func TestInsufficientProofRefusesBeforeProvider(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("Darwin-specific proof ceiling")
+	}
+	isolated(t)
+	var reads atomic.Int32
+	failures := make(chan error, 1)
+	_, c := host(t, func(h *Host) {
+		h.load = func(map[string]string) config.Config { reads.Add(1); return config.Config{} }
+		h.OnError = func(err error) { failures <- err }
+	})
+	if _, err := c.ReadWithOverrides(wire.RunOverrides{}); err == nil {
+		t.Fatal("insufficiently proven caller received configuration")
+	}
+	select {
+	case err := <-failures:
+		if !errors.Is(err, identity.ErrNotProven) {
+			t.Fatalf("expected proof refusal, got %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("missing proof refusal")
+	}
+	if reads.Load() != 0 {
+		t.Fatal("insufficiently proven caller reached provider")
 	}
 }
