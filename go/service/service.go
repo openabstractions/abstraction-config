@@ -23,6 +23,9 @@ type Host struct {
 	closeOnce sync.Once
 	workers   sync.WaitGroup
 	OnError   func(error)
+	// OnStopped is called when admission stops, before active calls drain.
+	// Assign it before Serve. It must return promptly.
+	OnStopped func()
 }
 
 func Listen(endpoint string) (*Host, error) {
@@ -49,6 +52,11 @@ func (h *Host) Serve(ctx context.Context) error {
 	stop := context.AfterFunc(ctx, func() { h.Close() })
 	defer stop()
 	defer h.workers.Wait()
+	defer func() {
+		if h.OnStopped != nil {
+			h.OnStopped()
+		}
+	}()
 	defer h.Close()
 	for {
 		connection, err := h.listener.Accept()
