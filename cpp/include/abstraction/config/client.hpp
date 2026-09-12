@@ -2,6 +2,7 @@
 #include <abstraction/config/rec.h>
 #include <abstraction/ipc/frame.hpp>
 #include <cstdlib>
+#include <optional>
 namespace abstraction::config {
 inline std::string default_endpoint() {
  if(const char* value=std::getenv("ABSTRACTION_CONFIG_ENDPOINT")){if(*value)return value;}
@@ -17,6 +18,8 @@ inline std::string default_endpoint() {
 class Client {
 public:
  explicit Client(std::string endpoint=default_endpoint()):endpoint_(std::move(endpoint)){}
+ // Explicit operation scope; copies retain the same absolute deadline.
+ Client(std::string endpoint, ipc::Deadline deadline):endpoint_(std::move(endpoint)),deadline_(deadline){}
  Snapshot Read()const {
   const auto value=[](const char* name){const char* p=std::getenv(name);return std::string(p?p:"");};
   RunOverrides overrides;
@@ -25,11 +28,13 @@ public:
   return ReadWithOverrides(overrides);
  }
  Snapshot ReadWithOverrides(const RunOverrides& overrides)const {
-  ipc::FrameTransport transport(endpoint_,2000,1<<20);
+  auto transport=deadline_?ipc::FrameTransport(endpoint_,*deadline_,1<<20)
+                          :ipc::FrameTransport(endpoint_,2000,1<<20);
   ConfigReaderClient<ipc::FrameTransport> client(transport);
   return client.Read(overrides);
  }
 private:
  std::string endpoint_;
+ std::optional<ipc::Deadline> deadline_;
 };
 }
