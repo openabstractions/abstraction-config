@@ -1,7 +1,7 @@
 # Python configuration service protocol
 
 The generated ConfigReader and ConfigEditor use the shared native IPC transport
-through the resolved facade. Install the coordinated identity, logging, config
+through the resolved facade. Install the coordinated identity, config
 and facade `py/` packages and configure the installed native IPC library as
 specified in the facade Python README.
 

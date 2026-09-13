@@ -10,18 +10,24 @@ A configuration service answers which optional services are configured, with
 the origin of each value. The service owns access to machine and user files;
 an application may supply its own explicit overrides for that call.
 
-## Service client
+## Application clients
 
-Run `openabstractions serve config` under the user's account. Go clients call
-`github.com/openabstractions/abstraction-config/go/client`'s `Discover().Read()`;
-C++ clients use `abstraction::config::Client{}.Read()`. Both use the same generated
-protocol. See [C++](cpp/README.md) for CMake setup.
+Use the resolved ConfigReader, ConfigEditor and ConfigObserver contracts through
+[the facade](https://github.com/openabstractions/abstraction-facade). The service
+reads existing configuration records and owns revision-checked user replacement.
+Applications supply run overrides explicitly and receive values with provenance.
+A provenance path is diagnostic; it does not authorize opening provider files.
 
-The service accepts only the same user. Client overrides are configuration
-claims, never authorization. The host's environment does not silently replace
-the caller's. A missing service returns an error; clients do not fall back to
-reading files. `ABSTRACTION_CONFIG_ENDPOINT` selects a nondefault endpoint.
-The original `Load` provider described below remains available separately.
+See [Python setup](py/README.md) and [C++ setup](cpp/README.md). Missing or refused
+services stay explicit. Default installed Go/C++/Python bindings retain independent
+server trust. A custom host requires independently configured expectations.
+
+## Retained provider documentation
+
+The native file-loading, saving and watching APIs below describe explicitly
+selected provider compatibility. They are not the normal resolved application
+entrypoint. Language and platform statements below apply to those native APIs;
+service client availability is described in the linked package pages.
 
 ## Service ownership and provider implementation
 
@@ -62,7 +68,7 @@ configuration behavior. Service checks report their narrower IPC scope.
 Whether to adopt this at all, what it costs and what is not proven:
 [Adopting](CONTRIBUTING.md#adopting).
 
-## Example
+## Explicit native-provider example
 
 ```go
 package main
