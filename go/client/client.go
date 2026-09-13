@@ -3,6 +3,7 @@
 package client
 
 import (
+	"context"
 	wire "github.com/openabstractions/abstraction-config/go/abstraction/config"
 	"github.com/openabstractions/abstraction-identity/listen"
 	"os"
@@ -23,14 +24,32 @@ func DefaultEndpoint() string {
 }
 func Discover() *Client { return New(DefaultEndpoint()) }
 func New(endpoint string) *Client {
-	return &Client{transport: listen.FrameClient{Endpoint: endpoint, Timeout: 2 * time.Second, MaxFrame: 1 << 20}}
+	return NewWithTransport(listen.FrameClient{Endpoint: endpoint})
+}
+
+// NewWithTransport retains the caller's endpoint, server trust and waiting limits.
+func NewWithTransport(transport listen.FrameClient) *Client {
+	return &Client{transport: transport.WithDefaults(2*time.Second, 1<<20)}
 }
 
 // Read captures this caller's existing run overrides at call time. Empty values
 // leave file answers intact. Overrides are configuration claims, not identity.
 func (c *Client) Read() (Snapshot, error) {
-	return c.ReadWithOverrides(RunOverrides{NasStore: os.Getenv("ABSTRACTION_NAS_STORE"), Store: os.Getenv("ABSTRACTION_STORE"), LogSink: os.Getenv("ABSTRACTION_LOG"), LogService: os.Getenv("ABSTRACTION_LOG_SERVICE")})
+	return c.ReadContext(context.Background())
+}
+
+// ReadContext captures run overrides and bounds this call by ctx.
+func (c *Client) ReadContext(ctx context.Context) (Snapshot, error) {
+	return c.ReadWithOverridesContext(ctx, RunOverrides{NasStore: os.Getenv("ABSTRACTION_NAS_STORE"), Store: os.Getenv("ABSTRACTION_STORE"), LogSink: os.Getenv("ABSTRACTION_LOG"), LogService: os.Getenv("ABSTRACTION_LOG_SERVICE")})
 }
 func (c *Client) ReadWithOverrides(overrides RunOverrides) (Snapshot, error) {
-	return wire.NewConfigReaderClient(&c.transport).Read(overrides)
+	return c.ReadWithOverridesContext(context.Background(), overrides)
+}
+
+// ReadWithOverridesContext uses ctx only for this operation.
+func (c *Client) ReadWithOverridesContext(ctx context.Context, overrides RunOverrides) (Snapshot, error) {
+	if err := ctx.Err(); err != nil {
+		return Snapshot{}, err
+	}
+	return wire.NewConfigReaderClient(c.transport.WithContext(ctx)).Read(overrides)
 }

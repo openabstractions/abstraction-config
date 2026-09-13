@@ -30,11 +30,20 @@ public:
  Snapshot ReadWithOverrides(const RunOverrides& overrides)const {
   auto transport=deadline_?ipc::FrameTransport(endpoint_,*deadline_,1<<20)
                           :ipc::FrameTransport(endpoint_,2000,1<<20);
+  transport = transport.WithCancellation(cancellation_).WithServerExpectation(server_);
   ConfigReaderClient<ipc::FrameTransport> client(transport);
   return client.Read(overrides);
+ }
+ Client WithServerExpectation(std::optional<ipc::ServerExpectation> server) const {auto copy=*this;copy.server_=std::move(server);return copy;}
+ Client WithCancellation(ipc::CancellationToken token) const {
+  auto scoped = *this;
+  scoped.cancellation_ = std::move(token);
+  return scoped;
  }
 private:
  std::string endpoint_;
  std::optional<ipc::Deadline> deadline_;
+ ipc::CancellationToken cancellation_;
+ std::optional<ipc::ServerExpectation> server_;
 };
 }

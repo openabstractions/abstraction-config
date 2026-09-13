@@ -1,16 +1,15 @@
-# abstraction-config, in Python
+# Explicit legacy Python configuration provider
 
-Where a machine keeps its answer to "which store", and who said so. An
-administrator's machine-wide file, then this user's file, then the environment
-for one run — each overriding the last, key by key, with the origin of every
-answer kept beside it.
+This `python/` package retains embedded file access for deliberate local-provider
+adoption. Its old `load`, `job_store` and `watch` names are deprecated application
+entrypoints. Use `legacy_load`, `legacy_job_store`, `legacy_watch` and
+`legacy_user_path` when intentionally selecting this provider. The old names
+retain their behavior; no files are moved or silently reinterpreted.
 
-An application asks the machine and names no path. A key nothing set is absent,
-which means this machine does not have that tier: a normal answer, not an error.
-
-This page is the Python package. The Go implementation, the file format and what
-is `UNPROVEN` are on
-[the repository](https://github.com/openabstractions/abstraction-config).
+Application clients use the generated protocol in `../py` and the resolved
+Python facade. See [the service client](../py/README.md). Existing user/machine
+records are read by the Go service; the application supplies run overrides
+explicitly and edits user values through revision-checked replacement.
 
 ## Install
 
@@ -26,22 +25,22 @@ beside each other and install them in dependency order:
 
 Python 3.9 or later.
 
-## An example that runs
+## Explicit local-provider example
 
 ```python
 import abstraction_config as config
 
-store, why = config.job_store()
+store, why = config.legacy_job_store()
 print("jobs live at:", store)
 print("because:", why)
 
-print(config.load().describe())
+print(config.legacy_load().describe())
 ```
 
 On a machine nobody has configured it prints the default and says so. It reads
 files and writes none, so running it changes nothing.
 
-## What an application calls
+## Retained provider compatibility API
 
 | call | what it does |
 |---|---|

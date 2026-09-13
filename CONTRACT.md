@@ -222,3 +222,30 @@ refuse a tag no rule names and a covered rule no expectation cites.
 (cd go && go test ./...)
 (cd python && python -m unittest discover -p 'test_*.py')
 ```
+
+## User editing service
+
+`abstraction.config/editor@1` shares the identity-bound config endpoint with the
+unchanged `abstraction.config/reader@1` interface. The receiver requires the
+same-account Program-proven caller before accessing user storage.
+
+| Operation boundary | Behavior |
+| --- | --- |
+| Settings | The existing four strings and `off` map describe configuration. Path-valued settings convey no authority to open provider storage. |
+| Backing file | The service selects its user-rung path at startup; no request supplies that path. |
+| ReadUser | Returns user values and an opaque normalized-content revision. Missing storage is empty; unreadable, corrupt or unsupported records are refused. Machine and environment rungs are excluded. |
+| ReplaceUser | Compares revision and replaces under the existing CAS edit lock. A stale revision returns `conflict` plus current user content without a write. `applied` returns the written snapshot. |
+| Clearing | Empty strings and an empty map remove user overrides. Lower rungs remain unchanged. |
+| Revision | Equal normalized content has equal revision, including after restoring earlier values. It is a content comparison token, not an operation identity or monotonic sequence. |
+| Refusal | `invalid_revision` rejects an empty expected revision; `storage_unavailable` preserves failed storage. Identity errors preserve the reader's `caller_unavailable`, `identity_required` and `wrong_user` codes. |
+| Waiting | Expired/canceled waiting never grants a write retry. Reread and reconcile an uncertain replacement before deciding a new edit. |
+
+The editor refuses unknown persisted fields rather than dropping them during
+replacement. This strict editor boundary does not change legacy `Load` behavior.
+Generated clients provide the wire interface; the Python artifact is vocabulary
+and transport injection, without a separately implemented Python config host.
+
+This provider bounds persisted editor records to 256KiB, leaving room for the
+generated snapshot and reply envelope within the 1MiB config frame budget. Both
+CAS reads and proposed replacements enforce the bound. Oversized storage is
+`storage_unavailable`; no partial replacement is written.

@@ -1,44 +1,10 @@
-// Package config is how an application finds the tiers this machine has,
-// without being told about any of them.
+// Package config implements the explicitly selected local configuration provider.
+// Services use this package to preserve existing user and machine records.
+// Applications resolve ConfigReader or ConfigEditor through the facade; provider
+// paths are diagnostic provenance and are not application storage instructions.
 //
-// # The problem this exists for
-//
-// Every abstraction in this repository delegates to whatever is installed: a
-// download goes to a NAS if one is set up, else to the OS transfer service, else
-// in-process. That is only useful if an application which knows nothing about
-// any of it — a fork of Lemonade, say — picks the right tier by itself.
-//
-// The first version discovered tiers from environment variables, and that was a
-// bad answer. Lemonade will not have ABSTRACTION_NAS_STORE set. Nobody launching
-// a GUI from a Start Menu shortcut has anything set. An abstraction that only
-// works when every application is separately configured has moved the problem
-// rather than solved it.
-//
-// # What SLF4J actually did
-//
-// SLF4J did not ask applications to configure a binding. It asked them to depend
-// on the facade, and then bound to whatever implementation was PRESENT on the
-// classpath at startup. Presence was the configuration. That is the property
-// worth copying, and the machine-level equivalent of a classpath is a
-// well-known location that setup writes once and every process reads.
-//
-//	installing the NAS tier      writes it here, once
-//	Lemonade, ComfyUI, modelget  read it, knowing nothing
-//
-// So there is exactly one configuration step per machine, performed by whoever
-// sets a tier up, and zero per application. An application calls Load() and gets
-// the truth about the machine it is running on.
-//
-// # Order of precedence, and why
-//
-//  1. environment      an override, for tests and one-off runs
-//  2. per-user file    what this user set up
-//  3. machine file     what an administrator set up for everyone
-//
-// The environment wins because overriding one run must not require editing a
-// file that other programs are reading. The user file beats the machine file
-// because a user must be able to opt out of something an administrator turned
-// on without needing an administrator.
+// Legacy Load and JobStore remain source-compatible for deliberate embedded
+// provider adoption. Their file discovery is deprecated for application clients.
 package config
 
 import (
@@ -173,6 +139,8 @@ var EnvVars = map[string]string{
 // Load returns the machine's configuration. It never fails: a machine with
 // nothing set up is a machine with no extra tiers, which every caller already
 // has to handle.
+// Deprecated: application clients use facade.Discover().ResolveConfig.
+// This retained helper explicitly selects the embedded file provider.
 func Load() Config { return load(os.Getenv) }
 
 // LoadWithOverrides reads the existing file providers, then applies only the
@@ -249,6 +217,29 @@ func read(path, rung string) (Config, error) {
 			fmt.Fprintf(os.Stderr, "abstraction: ignoring %s: %v\n", path, err)
 			return Config{}, err
 		}
+	}
+	return decodeSource(b, path, rung)
+}
+
+// readMachineBounded is the service-side machine source. Trust is checked
+// before reading bytes; callers retain the merged reader's refusal fallback.
+func readMachineBounded(path string) (Config, error) { return readMachineSource(path, trusted) }
+func readMachineSource(path string, checkTrust func(string) error) (Config, error) {
+	if err := checkTrust(path); err != nil {
+		fmt.Fprintf(os.Stderr, "abstraction: ignoring %s: %v\n", path, err)
+		return Config{}, err
+	}
+	data, err := cas.ReadLimit(path, MaxUserFileBytes)
+	if err != nil {
+		return Config{}, err
+	}
+	return decodeSource(data, path, Machine)
+}
+
+// decodeSource preserves the merged provider's existing source semantics.
+func decodeSource(b []byte, path, rung string) (Config, error) {
+	if b == nil {
+		return Config{}, os.ErrNotExist
 	}
 	var c Config
 	if err := json.Unmarshal(b, &c); err != nil {
@@ -493,6 +484,8 @@ func sorted(m map[string]string) []string {
 // Resolving "what has this machine been told" is exactly this package's job,
 // and it already answers the same shape of question in UserPath and
 // MachinePath.
+// Deprecated: application clients resolve the job service and retain receipts.
+// This helper supplies storage only to explicitly selected legacy providers.
 func JobStore() (string, error) {
 	if v := Load().Store; v != "" {
 		return v, nil

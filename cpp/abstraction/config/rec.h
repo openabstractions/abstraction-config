@@ -132,6 +132,16 @@ inline void esc(std::string& out, const std::string& s) {
     out += '"';
 }
 
+class Refusal : public std::runtime_error {
+public:
+    Refusal(const char* word, std::size_t offset)
+        : std::runtime_error(std::string("refused: ") + word + " at byte " + std::to_string(offset)),
+          word(word),
+          offset(offset) {}
+    const char* word;
+    std::size_t offset;
+};
+
 inline void strmap(std::string& out, const std::map<std::string, std::string>& m, int depth) {
     if (m.empty()) { out += "{}"; return; }
     out += "{\n";
@@ -147,6 +157,12 @@ inline void strmap(std::string& out, const std::map<std::string, std::string>& m
     pad(out, depth);
     out += '}';
 }
+
+inline const std::vector<std::string> kUserReplaceOutcomeNames = {"applied", "conflict"};
+inline const std::string kUserReplaceOutcomeUnknown = "refuse";
+
+inline const std::vector<std::string> kConfigObservationOutcomeNames = {"snapshot", "unchanged", "gap", "unavailable", "unsupported", "invalid"};
+inline const std::string kConfigObservationOutcomeUnknown = "refuse";
 
 struct RunOverrides {
     std::string nas_store;
@@ -178,8 +194,46 @@ struct Snapshot {
     std::string stamp;
 };
 
+struct UserSettings {
+    std::string nas_store;
+    std::string store;
+    std::string log_sink;
+    std::string log_service;
+    std::map<std::string, std::string> off;
+};
+
+struct UserSnapshot {
+    UserSettings values;
+    std::string revision;
+};
+
+struct UserReplaceResult {
+    std::string outcome;
+    UserSnapshot snapshot;
+};
+
+struct ConfigObservation {
+    std::string outcome;
+    std::string cursor;
+    std::optional<Snapshot> snapshot;
+};
+
 struct OAConfigReaderReadArguments {
     RunOverrides overrides;
+};
+
+struct OAConfigEditorReadUserArguments {
+};
+
+struct OAConfigEditorReplaceUserArguments {
+    std::string expected_revision;
+    UserSettings values;
+};
+
+struct OAConfigObserverObserveArguments {
+    RunOverrides overrides;
+    std::string cursor;
+    std::int64_t wait_ms = 0;
 };
 
 struct OAServiceFrame {
@@ -204,6 +258,18 @@ struct OAServiceError {
 
 struct OAConfigReaderReadResult {
     Snapshot value;
+};
+
+struct OAConfigEditorReadUserResult {
+    UserSnapshot value;
+};
+
+struct OAConfigEditorReplaceUserResult {
+    UserReplaceResult value;
+};
+
+struct OAConfigObserverObserveResult {
+    ConfigObservation value;
 };
 
 inline void enc_runoverrides(std::string& out, const RunOverrides& v, int depth) {
@@ -338,6 +404,106 @@ inline void enc_snapshot(std::string& out, const Snapshot& v, int depth) {
     out += '}';
 }
 
+inline void enc_usersettings(std::string& out, const UserSettings& v, int depth) {
+    out += '{';
+    out += '\n';
+    pad(out, depth + 1);
+    esc(out, "nas_store");
+    out += ": ";
+    esc(out, v.nas_store);
+    out += ',';
+    out += '\n';
+    pad(out, depth + 1);
+    esc(out, "store");
+    out += ": ";
+    esc(out, v.store);
+    out += ',';
+    out += '\n';
+    pad(out, depth + 1);
+    esc(out, "log_sink");
+    out += ": ";
+    esc(out, v.log_sink);
+    out += ',';
+    out += '\n';
+    pad(out, depth + 1);
+    esc(out, "log_service");
+    out += ": ";
+    esc(out, v.log_service);
+    out += ',';
+    out += '\n';
+    pad(out, depth + 1);
+    esc(out, "off");
+    out += ": ";
+    strmap(out, v.off, depth + 1);
+    out += '\n';
+    pad(out, depth);
+    out += '}';
+}
+
+inline void enc_usersnapshot(std::string& out, const UserSnapshot& v, int depth) {
+    out += '{';
+    out += '\n';
+    pad(out, depth + 1);
+    esc(out, "values");
+    out += ": ";
+    enc_usersettings(out, v.values, depth + 1);
+    out += ',';
+    out += '\n';
+    pad(out, depth + 1);
+    esc(out, "revision");
+    out += ": ";
+    esc(out, v.revision);
+    out += '\n';
+    pad(out, depth);
+    out += '}';
+}
+
+inline void enc_userreplaceresult(std::string& out, const UserReplaceResult& v, int depth) {
+    if (v.outcome != "applied" && v.outcome != "conflict") { throw Refusal("bad_enum",0); }
+    out += '{';
+    out += '\n';
+    pad(out, depth + 1);
+    esc(out, "outcome");
+    out += ": ";
+    esc(out, v.outcome);
+    out += ',';
+    out += '\n';
+    pad(out, depth + 1);
+    esc(out, "snapshot");
+    out += ": ";
+    enc_usersnapshot(out, v.snapshot, depth + 1);
+    out += '\n';
+    pad(out, depth);
+    out += '}';
+}
+
+inline void enc_configobservation(std::string& out, const ConfigObservation& v, int depth) {
+    if (v.outcome != "snapshot" && v.outcome != "unchanged" && v.outcome != "gap" && v.outcome != "unavailable" && v.outcome != "unsupported" && v.outcome != "invalid") { throw Refusal("bad_enum",0); }
+    out += '{';
+    out += '\n';
+    pad(out, depth + 1);
+    esc(out, "outcome");
+    out += ": ";
+    esc(out, v.outcome);
+    out += ',';
+    out += '\n';
+    pad(out, depth + 1);
+    esc(out, "cursor");
+    out += ": ";
+    esc(out, v.cursor);
+    if (v.snapshot.has_value()) {
+        out += ',';
+        out += '\n';
+        pad(out, depth + 1);
+        esc(out, "snapshot");
+        out += ": ";
+        enc_snapshot(out, *v.snapshot, depth + 1);
+    }
+    out += '\n';
+    pad(out, depth);
+    out += '}';
+}
+
 inline void enc_oaconfigreaderreadarguments(std::string& out, const OAConfigReaderReadArguments& v, int depth) {
     out += '{';
     out += '\n';
@@ -345,6 +511,53 @@ inline void enc_oaconfigreaderreadarguments(std::string& out, const OAConfigRead
     esc(out, "overrides");
     out += ": ";
     enc_runoverrides(out, v.overrides, depth + 1);
+    out += '\n';
+    pad(out, depth);
+    out += '}';
+}
+
+inline void enc_oaconfigeditorreaduserarguments(std::string& out, const OAConfigEditorReadUserArguments& v, int depth) {
+    out += '{';
+    out += '}';
+}
+
+inline void enc_oaconfigeditorreplaceuserarguments(std::string& out, const OAConfigEditorReplaceUserArguments& v, int depth) {
+    out += '{';
+    out += '\n';
+    pad(out, depth + 1);
+    esc(out, "expected_revision");
+    out += ": ";
+    esc(out, v.expected_revision);
+    out += ',';
+    out += '\n';
+    pad(out, depth + 1);
+    esc(out, "values");
+    out += ": ";
+    enc_usersettings(out, v.values, depth + 1);
+    out += '\n';
+    pad(out, depth);
+    out += '}';
+}
+
+inline void enc_oaconfigobserverobservearguments(std::string& out, const OAConfigObserverObserveArguments& v, int depth) {
+    out += '{';
+    out += '\n';
+    pad(out, depth + 1);
+    esc(out, "overrides");
+    out += ": ";
+    enc_runoverrides(out, v.overrides, depth + 1);
+    out += ',';
+    out += '\n';
+    pad(out, depth + 1);
+    esc(out, "cursor");
+    out += ": ";
+    esc(out, v.cursor);
+    out += ',';
+    out += '\n';
+    pad(out, depth + 1);
+    esc(out, "wait_ms");
+    out += ": ";
+    num(out, v.wait_ms);
     out += '\n';
     pad(out, depth);
     out += '}';
@@ -446,6 +659,42 @@ inline void enc_oaconfigreaderreadresult(std::string& out, const OAConfigReaderR
     out += '}';
 }
 
+inline void enc_oaconfigeditorreaduserresult(std::string& out, const OAConfigEditorReadUserResult& v, int depth) {
+    out += '{';
+    out += '\n';
+    pad(out, depth + 1);
+    esc(out, "value");
+    out += ": ";
+    enc_usersnapshot(out, v.value, depth + 1);
+    out += '\n';
+    pad(out, depth);
+    out += '}';
+}
+
+inline void enc_oaconfigeditorreplaceuserresult(std::string& out, const OAConfigEditorReplaceUserResult& v, int depth) {
+    out += '{';
+    out += '\n';
+    pad(out, depth + 1);
+    esc(out, "value");
+    out += ": ";
+    enc_userreplaceresult(out, v.value, depth + 1);
+    out += '\n';
+    pad(out, depth);
+    out += '}';
+}
+
+inline void enc_oaconfigobserverobserveresult(std::string& out, const OAConfigObserverObserveResult& v, int depth) {
+    out += '{';
+    out += '\n';
+    pad(out, depth + 1);
+    esc(out, "value");
+    out += ": ";
+    enc_configobservation(out, v.value, depth + 1);
+    out += '\n';
+    pad(out, depth);
+    out += '}';
+}
+
 inline std::string encode(const Snapshot& v) {
     std::string out;
     enc_snapshot(out, v, 0);
@@ -456,15 +705,7 @@ inline std::string encode(const Snapshot& v) {
 inline constexpr int kDepthLimit = 64;
 inline constexpr std::size_t kI64Digits = 19;
 
-class Refusal : public std::runtime_error {
-public:
-    Refusal(const char* word, std::size_t offset)
-        : std::runtime_error(std::string("refused: ") + word + " at byte " + std::to_string(offset)),
-          word(word),
-          offset(offset) {}
-    const char* word;
-    std::size_t offset;
-};
+
 
 inline void append_rune(std::string& out, std::uint32_t cp) {
     if (cp < 0x80) {
@@ -786,11 +1027,21 @@ inline RunOverrides decode_runoverrides(Reader& r);
 inline Origin decode_origin(Reader& r);
 inline Origins decode_origins(Reader& r);
 inline Snapshot decode_snapshot(Reader& r);
+inline UserSettings decode_usersettings(Reader& r);
+inline UserSnapshot decode_usersnapshot(Reader& r);
+inline UserReplaceResult decode_userreplaceresult(Reader& r);
+inline ConfigObservation decode_configobservation(Reader& r);
 inline OAConfigReaderReadArguments decode_oaconfigreaderreadarguments(Reader& r);
+inline OAConfigEditorReadUserArguments decode_oaconfigeditorreaduserarguments(Reader& r);
+inline OAConfigEditorReplaceUserArguments decode_oaconfigeditorreplaceuserarguments(Reader& r);
+inline OAConfigObserverObserveArguments decode_oaconfigobserverobservearguments(Reader& r);
 inline OAServiceFrame decode_oaserviceframe(Reader& r);
 inline OAServiceReply decode_oaservicereply(Reader& r);
 inline OAServiceError decode_oaserviceerror(Reader& r);
 inline OAConfigReaderReadResult decode_oaconfigreaderreadresult(Reader& r);
+inline OAConfigEditorReadUserResult decode_oaconfigeditorreaduserresult(Reader& r);
+inline OAConfigEditorReplaceUserResult decode_oaconfigeditorreplaceuserresult(Reader& r);
+inline OAConfigObserverObserveResult decode_oaconfigobserverobserveresult(Reader& r);
 
 inline RunOverrides decode_runoverrides(Reader& r) {
     if (r.at() != '{') r.refuse("wrong_type");
@@ -988,6 +1239,180 @@ inline Snapshot decode_snapshot(Reader& r) {
     return v;
 }
 
+inline UserSettings decode_usersettings(Reader& r) {
+    if (r.at() != '{') r.refuse("wrong_type");
+    r.enter();
+    ++r.pos;
+    UserSettings v;
+    std::uint32_t seen = 0;
+    r.skip_ws();
+    if (r.at() != '}') {
+        for (;;) {
+            r.skip_ws();
+            if (r.at() != '"') r.refuse("malformed");
+            const std::string key = r.str();
+            r.skip_ws();
+            if (r.at() != ':') r.refuse("malformed");
+            ++r.pos;
+            r.skip_ws();
+            if (key == "nas_store") {
+                if (seen & 1u) r.refuse("duplicate_field");
+                seen |= 1u;
+                v.nas_store = r.str();
+            } else if (key == "store") {
+                if (seen & 2u) r.refuse("duplicate_field");
+                seen |= 2u;
+                v.store = r.str();
+            } else if (key == "log_sink") {
+                if (seen & 4u) r.refuse("duplicate_field");
+                seen |= 4u;
+                v.log_sink = r.str();
+            } else if (key == "log_service") {
+                if (seen & 8u) r.refuse("duplicate_field");
+                seen |= 8u;
+                v.log_service = r.str();
+            } else if (key == "off") {
+                if (seen & 16u) r.refuse("duplicate_field");
+                seen |= 16u;
+                v.off = str_map(r);
+            } else {
+                r.refuse("unknown_field");
+            }
+            r.skip_ws();
+            if (r.at() != ',') break;
+            ++r.pos;
+        }
+    }
+    if (r.at() != '}') r.refuse("malformed");
+    ++r.pos;
+    --r.depth;
+    if ((seen & 31u) != 31u) r.refuse("missing_field");
+    return v;
+}
+
+inline UserSnapshot decode_usersnapshot(Reader& r) {
+    if (r.at() != '{') r.refuse("wrong_type");
+    r.enter();
+    ++r.pos;
+    UserSnapshot v;
+    std::uint32_t seen = 0;
+    r.skip_ws();
+    if (r.at() != '}') {
+        for (;;) {
+            r.skip_ws();
+            if (r.at() != '"') r.refuse("malformed");
+            const std::string key = r.str();
+            r.skip_ws();
+            if (r.at() != ':') r.refuse("malformed");
+            ++r.pos;
+            r.skip_ws();
+            if (key == "values") {
+                if (seen & 1u) r.refuse("duplicate_field");
+                seen |= 1u;
+                v.values = decode_usersettings(r);
+            } else if (key == "revision") {
+                if (seen & 2u) r.refuse("duplicate_field");
+                seen |= 2u;
+                v.revision = r.str();
+            } else {
+                r.refuse("unknown_field");
+            }
+            r.skip_ws();
+            if (r.at() != ',') break;
+            ++r.pos;
+        }
+    }
+    if (r.at() != '}') r.refuse("malformed");
+    ++r.pos;
+    --r.depth;
+    if ((seen & 3u) != 3u) r.refuse("missing_field");
+    return v;
+}
+
+inline UserReplaceResult decode_userreplaceresult(Reader& r) {
+    if (r.at() != '{') r.refuse("wrong_type");
+    r.enter();
+    ++r.pos;
+    UserReplaceResult v;
+    std::uint32_t seen = 0;
+    r.skip_ws();
+    if (r.at() != '}') {
+        for (;;) {
+            r.skip_ws();
+            if (r.at() != '"') r.refuse("malformed");
+            const std::string key = r.str();
+            r.skip_ws();
+            if (r.at() != ':') r.refuse("malformed");
+            ++r.pos;
+            r.skip_ws();
+            if (key == "outcome") {
+                if (seen & 1u) r.refuse("duplicate_field");
+                seen |= 1u;
+                v.outcome = r.str();
+            } else if (key == "snapshot") {
+                if (seen & 2u) r.refuse("duplicate_field");
+                seen |= 2u;
+                v.snapshot = decode_usersnapshot(r);
+            } else {
+                r.refuse("unknown_field");
+            }
+            r.skip_ws();
+            if (r.at() != ',') break;
+            ++r.pos;
+        }
+    }
+    if (r.at() != '}') r.refuse("malformed");
+    ++r.pos;
+    --r.depth;
+    if ((seen & 3u) != 3u) r.refuse("missing_field");
+    if (v.outcome != "applied" && v.outcome != "conflict") { r.refuse("bad_enum"); }
+    return v;
+}
+
+inline ConfigObservation decode_configobservation(Reader& r) {
+    if (r.at() != '{') r.refuse("wrong_type");
+    r.enter();
+    ++r.pos;
+    ConfigObservation v;
+    std::uint32_t seen = 0;
+    r.skip_ws();
+    if (r.at() != '}') {
+        for (;;) {
+            r.skip_ws();
+            if (r.at() != '"') r.refuse("malformed");
+            const std::string key = r.str();
+            r.skip_ws();
+            if (r.at() != ':') r.refuse("malformed");
+            ++r.pos;
+            r.skip_ws();
+            if (key == "outcome") {
+                if (seen & 1u) r.refuse("duplicate_field");
+                seen |= 1u;
+                v.outcome = r.str();
+            } else if (key == "cursor") {
+                if (seen & 2u) r.refuse("duplicate_field");
+                seen |= 2u;
+                v.cursor = r.str();
+            } else if (key == "snapshot") {
+                if (seen & 4u) r.refuse("duplicate_field");
+                seen |= 4u;
+                v.snapshot = decode_snapshot(r);
+            } else {
+                r.refuse("unknown_field");
+            }
+            r.skip_ws();
+            if (r.at() != ',') break;
+            ++r.pos;
+        }
+    }
+    if (r.at() != '}') r.refuse("malformed");
+    ++r.pos;
+    --r.depth;
+    if ((seen & 3u) != 3u) r.refuse("missing_field");
+    if (v.outcome != "snapshot" && v.outcome != "unchanged" && v.outcome != "gap" && v.outcome != "unavailable" && v.outcome != "unsupported" && v.outcome != "invalid") { r.refuse("bad_enum"); }
+    return v;
+}
+
 inline OAConfigReaderReadArguments decode_oaconfigreaderreadarguments(Reader& r) {
     if (r.at() != '{') r.refuse("wrong_type");
     r.enter();
@@ -1020,6 +1445,119 @@ inline OAConfigReaderReadArguments decode_oaconfigreaderreadarguments(Reader& r)
     ++r.pos;
     --r.depth;
     if ((seen & 1u) != 1u) r.refuse("missing_field");
+    return v;
+}
+
+inline OAConfigEditorReadUserArguments decode_oaconfigeditorreaduserarguments(Reader& r) {
+    if (r.at() != '{') r.refuse("wrong_type");
+    r.enter();
+    ++r.pos;
+    OAConfigEditorReadUserArguments v;
+    std::uint32_t seen = 0;
+    r.skip_ws();
+    if (r.at() != '}') {
+        for (;;) {
+            r.skip_ws();
+            if (r.at() != '"') r.refuse("malformed");
+            const std::string key = r.str();
+            r.skip_ws();
+            if (r.at() != ':') r.refuse("malformed");
+            ++r.pos;
+            r.skip_ws();
+            if (false) {
+            } else {
+                r.refuse("unknown_field");
+            }
+            r.skip_ws();
+            if (r.at() != ',') break;
+            ++r.pos;
+        }
+    }
+    if (r.at() != '}') r.refuse("malformed");
+    ++r.pos;
+    --r.depth;
+    return v;
+}
+
+inline OAConfigEditorReplaceUserArguments decode_oaconfigeditorreplaceuserarguments(Reader& r) {
+    if (r.at() != '{') r.refuse("wrong_type");
+    r.enter();
+    ++r.pos;
+    OAConfigEditorReplaceUserArguments v;
+    std::uint32_t seen = 0;
+    r.skip_ws();
+    if (r.at() != '}') {
+        for (;;) {
+            r.skip_ws();
+            if (r.at() != '"') r.refuse("malformed");
+            const std::string key = r.str();
+            r.skip_ws();
+            if (r.at() != ':') r.refuse("malformed");
+            ++r.pos;
+            r.skip_ws();
+            if (key == "expected_revision") {
+                if (seen & 1u) r.refuse("duplicate_field");
+                seen |= 1u;
+                v.expected_revision = r.str();
+            } else if (key == "values") {
+                if (seen & 2u) r.refuse("duplicate_field");
+                seen |= 2u;
+                v.values = decode_usersettings(r);
+            } else {
+                r.refuse("unknown_field");
+            }
+            r.skip_ws();
+            if (r.at() != ',') break;
+            ++r.pos;
+        }
+    }
+    if (r.at() != '}') r.refuse("malformed");
+    ++r.pos;
+    --r.depth;
+    if ((seen & 3u) != 3u) r.refuse("missing_field");
+    return v;
+}
+
+inline OAConfigObserverObserveArguments decode_oaconfigobserverobservearguments(Reader& r) {
+    if (r.at() != '{') r.refuse("wrong_type");
+    r.enter();
+    ++r.pos;
+    OAConfigObserverObserveArguments v;
+    std::uint32_t seen = 0;
+    r.skip_ws();
+    if (r.at() != '}') {
+        for (;;) {
+            r.skip_ws();
+            if (r.at() != '"') r.refuse("malformed");
+            const std::string key = r.str();
+            r.skip_ws();
+            if (r.at() != ':') r.refuse("malformed");
+            ++r.pos;
+            r.skip_ws();
+            if (key == "overrides") {
+                if (seen & 1u) r.refuse("duplicate_field");
+                seen |= 1u;
+                v.overrides = decode_runoverrides(r);
+            } else if (key == "cursor") {
+                if (seen & 2u) r.refuse("duplicate_field");
+                seen |= 2u;
+                v.cursor = r.str();
+            } else if (key == "wait_ms") {
+                if (seen & 4u) r.refuse("duplicate_field");
+                seen |= 4u;
+                v.wait_ms = r.integer(INT64_MIN, INT64_MAX);
+            } else {
+                r.refuse("unknown_field");
+            }
+            r.skip_ws();
+            if (r.at() != ',') break;
+            ++r.pos;
+        }
+    }
+    if (r.at() != '}') r.refuse("malformed");
+    ++r.pos;
+    --r.depth;
+    if ((seen & 7u) != 7u) r.refuse("missing_field");
     return v;
 }
 
@@ -1195,6 +1733,111 @@ inline OAConfigReaderReadResult decode_oaconfigreaderreadresult(Reader& r) {
     return v;
 }
 
+inline OAConfigEditorReadUserResult decode_oaconfigeditorreaduserresult(Reader& r) {
+    if (r.at() != '{') r.refuse("wrong_type");
+    r.enter();
+    ++r.pos;
+    OAConfigEditorReadUserResult v;
+    std::uint32_t seen = 0;
+    r.skip_ws();
+    if (r.at() != '}') {
+        for (;;) {
+            r.skip_ws();
+            if (r.at() != '"') r.refuse("malformed");
+            const std::string key = r.str();
+            r.skip_ws();
+            if (r.at() != ':') r.refuse("malformed");
+            ++r.pos;
+            r.skip_ws();
+            if (key == "value") {
+                if (seen & 1u) r.refuse("duplicate_field");
+                seen |= 1u;
+                v.value = decode_usersnapshot(r);
+            } else {
+                r.refuse("unknown_field");
+            }
+            r.skip_ws();
+            if (r.at() != ',') break;
+            ++r.pos;
+        }
+    }
+    if (r.at() != '}') r.refuse("malformed");
+    ++r.pos;
+    --r.depth;
+    if ((seen & 1u) != 1u) r.refuse("missing_field");
+    return v;
+}
+
+inline OAConfigEditorReplaceUserResult decode_oaconfigeditorreplaceuserresult(Reader& r) {
+    if (r.at() != '{') r.refuse("wrong_type");
+    r.enter();
+    ++r.pos;
+    OAConfigEditorReplaceUserResult v;
+    std::uint32_t seen = 0;
+    r.skip_ws();
+    if (r.at() != '}') {
+        for (;;) {
+            r.skip_ws();
+            if (r.at() != '"') r.refuse("malformed");
+            const std::string key = r.str();
+            r.skip_ws();
+            if (r.at() != ':') r.refuse("malformed");
+            ++r.pos;
+            r.skip_ws();
+            if (key == "value") {
+                if (seen & 1u) r.refuse("duplicate_field");
+                seen |= 1u;
+                v.value = decode_userreplaceresult(r);
+            } else {
+                r.refuse("unknown_field");
+            }
+            r.skip_ws();
+            if (r.at() != ',') break;
+            ++r.pos;
+        }
+    }
+    if (r.at() != '}') r.refuse("malformed");
+    ++r.pos;
+    --r.depth;
+    if ((seen & 1u) != 1u) r.refuse("missing_field");
+    return v;
+}
+
+inline OAConfigObserverObserveResult decode_oaconfigobserverobserveresult(Reader& r) {
+    if (r.at() != '{') r.refuse("wrong_type");
+    r.enter();
+    ++r.pos;
+    OAConfigObserverObserveResult v;
+    std::uint32_t seen = 0;
+    r.skip_ws();
+    if (r.at() != '}') {
+        for (;;) {
+            r.skip_ws();
+            if (r.at() != '"') r.refuse("malformed");
+            const std::string key = r.str();
+            r.skip_ws();
+            if (r.at() != ':') r.refuse("malformed");
+            ++r.pos;
+            r.skip_ws();
+            if (key == "value") {
+                if (seen & 1u) r.refuse("duplicate_field");
+                seen |= 1u;
+                v.value = decode_configobservation(r);
+            } else {
+                r.refuse("unknown_field");
+            }
+            r.skip_ws();
+            if (r.at() != ',') break;
+            ++r.pos;
+        }
+    }
+    if (r.at() != '}') r.refuse("malformed");
+    ++r.pos;
+    --r.depth;
+    if ((seen & 1u) != 1u) r.refuse("missing_field");
+    return v;
+}
+
 inline Snapshot decode(std::string_view data) {
     Reader r{data};
     r.skip_ws();
@@ -1205,7 +1848,7 @@ inline Snapshot decode(std::string_view data) {
 }
 
 // kRefusals is in the order two of them are chosen between.
-inline const std::vector<std::string> kRefusals = {"malformed", "bad_string", "number_spelling", "wrong_type", "depth_exceeded", "duplicate_field", "unknown_field", "missing_field", "trailing_bytes"};
+inline const std::vector<std::string> kRefusals = {"malformed", "bad_string", "number_spelling", "wrong_type", "depth_exceeded", "duplicate_field", "unknown_field", "missing_field", "bad_enum", "trailing_bytes"};
 
 inline int refusal_rank(std::string_view word) {
     for (std::size_t i = 0; i < kRefusals.size(); ++i)
@@ -1216,6 +1859,8 @@ inline int refusal_rank(std::string_view word) {
 struct FrameWriter{virtual ~FrameWriter()=default;virtual void WriteFrame(std::string_view)=0;};
 struct DispatchError:std::runtime_error{using std::runtime_error::runtime_error;};
 inline OAServiceFrame service_payload(std::string_view frame){Reader r{frame};r.skip_ws();auto v=decode_oaserviceframe(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");if(v.version!=1)throw DispatchError("unknown_version");return v;}
+// Validates the request envelope and version; dispatchers validate typed arguments.
+inline std::string service_name(std::string_view frame){return service_payload(frame).service;}
 
 struct FrameExchanger{virtual ~FrameExchanger()=default;virtual std::string ExchangeFrame(std::string_view)=0;};
 struct ServiceError:std::runtime_error{std::string code,message;ServiceError(std::string c,std::string m):std::runtime_error(m.empty()?c:m),code(c),message(m){}};
@@ -1239,6 +1884,7 @@ auto response=transport_.ExchangeFrame(frame);auto payload=service_response(resp
 return result.value;
 }
 };
+struct ConfigReaderService{inline static constexpr std::string_view wire_name="abstraction.config/reader@1";inline static constexpr std::string_view capability="abstraction.config";template<class Transport>using Client=ConfigReaderClient<Transport>;};
 struct ConfigReaderDispatcher:FrameWriter,FrameExchanger{ConfigReader&handler;explicit ConfigReaderDispatcher(ConfigReader&h):handler(h){}
 void WriteFrame(std::string_view frame)override{auto v=service_payload(frame);if(v.service!="abstraction.config/reader@1")throw DispatchError("unknown_service");
 if(v.method=="Read"){
@@ -1259,6 +1905,100 @@ try{
 OAConfigReaderReadResult value;
 value.value=result;
 Raw payload;enc_oaconfigreaderreadresult(payload,value,1);Reader r{payload};r.depth=1;r.skip_ws();decode_oaconfigreaderreadresult(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");return payload;
+}catch(...){throw ServiceError("invalid_result","");}
+}
+};
+struct ConfigEditor{virtual ~ConfigEditor()=default;
+virtual UserSnapshot ReadUser()=0;
+virtual UserReplaceResult ReplaceUser(const std::string& arg0,const UserSettings& arg1)=0;
+};
+template<class Transport>struct ConfigEditorClient:ConfigEditor{Transport& transport_;explicit ConfigEditorClient(Transport&t):transport_(t){}
+UserSnapshot ReadUser()override{OAConfigEditorReadUserArguments args;
+OAServiceFrame v;v.version=1;v.service="abstraction.config/editor@1";v.method="ReadUser";enc_oaconfigeditorreaduserarguments(v.arguments,args,1);std::string frame;enc_oaserviceframe(frame,v,0);service_payload(frame);
+auto response=transport_.ExchangeFrame(frame);auto payload=service_response(response,v.service,v.method);Reader r{payload};r.depth=1;r.skip_ws();auto result=decode_oaconfigeditorreaduserresult(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");
+return result.value;
+}
+UserReplaceResult ReplaceUser(const std::string& arg0,const UserSettings& arg1)override{OAConfigEditorReplaceUserArguments args;
+args.expected_revision=arg0;
+args.values=arg1;
+OAServiceFrame v;v.version=1;v.service="abstraction.config/editor@1";v.method="ReplaceUser";enc_oaconfigeditorreplaceuserarguments(v.arguments,args,1);std::string frame;enc_oaserviceframe(frame,v,0);service_payload(frame);
+auto response=transport_.ExchangeFrame(frame);auto payload=service_response(response,v.service,v.method);Reader r{payload};r.depth=1;r.skip_ws();auto result=decode_oaconfigeditorreplaceuserresult(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");
+return result.value;
+}
+};
+struct ConfigEditorService{inline static constexpr std::string_view wire_name="abstraction.config/editor@1";inline static constexpr std::string_view capability="abstraction.config";template<class Transport>using Client=ConfigEditorClient<Transport>;};
+struct ConfigEditorDispatcher:FrameWriter,FrameExchanger{ConfigEditor&handler;explicit ConfigEditorDispatcher(ConfigEditor&h):handler(h){}
+void WriteFrame(std::string_view frame)override{auto v=service_payload(frame);if(v.service!="abstraction.config/editor@1")throw DispatchError("unknown_service");
+if(v.method=="ReadUser"){
+throw DispatchError("wrong_mode");}
+if(v.method=="ReplaceUser"){
+throw DispatchError("wrong_mode");}
+throw DispatchError("unknown_method");}
+std::string ExchangeFrame(std::string_view frame)override{auto v=service_payload(frame);if(v.service!="abstraction.config/editor@1"){ServiceError e("unknown_service","");return service_reply(v,"",&e);}
+try{
+if(v.method=="ReadUser"){
+Reader r{v.arguments};r.depth=1;r.skip_ws();auto args=decode_oaconfigeditorreaduserarguments(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");auto payload=invoke_ReadUser(args);return service_reply(v,payload);}
+if(v.method=="ReplaceUser"){
+Reader r{v.arguments};r.depth=1;r.skip_ws();auto args=decode_oaconfigeditorreplaceuserarguments(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");auto payload=invoke_ReplaceUser(args);return service_reply(v,payload);}
+throw ServiceError("unknown_method","");}catch(const ServiceError&e){return service_reply(v,"",&e);}catch(const Refusal&e){ServiceError error(e.word,"");return service_reply(v,"",&error);}
+}
+Raw invoke_ReadUser(const OAConfigEditorReadUserArguments&args){
+UserSnapshot result{};
+try{
+result=handler.ReadUser();
+}catch(const ServiceError&){throw;}catch(...){throw ServiceError("handler_error","handler failed");}
+try{
+OAConfigEditorReadUserResult value;
+value.value=result;
+Raw payload;enc_oaconfigeditorreaduserresult(payload,value,1);Reader r{payload};r.depth=1;r.skip_ws();decode_oaconfigeditorreaduserresult(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");return payload;
+}catch(...){throw ServiceError("invalid_result","");}
+}
+Raw invoke_ReplaceUser(const OAConfigEditorReplaceUserArguments&args){
+UserReplaceResult result{};
+try{
+result=handler.ReplaceUser(args.expected_revision,args.values);
+}catch(const ServiceError&){throw;}catch(...){throw ServiceError("handler_error","handler failed");}
+try{
+OAConfigEditorReplaceUserResult value;
+value.value=result;
+Raw payload;enc_oaconfigeditorreplaceuserresult(payload,value,1);Reader r{payload};r.depth=1;r.skip_ws();decode_oaconfigeditorreplaceuserresult(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");return payload;
+}catch(...){throw ServiceError("invalid_result","");}
+}
+};
+struct ConfigObserver{virtual ~ConfigObserver()=default;
+virtual ConfigObservation Observe(const RunOverrides& arg0,const std::string& arg1,const std::int64_t& arg2)=0;
+};
+template<class Transport>struct ConfigObserverClient:ConfigObserver{Transport& transport_;explicit ConfigObserverClient(Transport&t):transport_(t){}
+ConfigObservation Observe(const RunOverrides& arg0,const std::string& arg1,const std::int64_t& arg2)override{OAConfigObserverObserveArguments args;
+args.overrides=arg0;
+args.cursor=arg1;
+args.wait_ms=arg2;
+OAServiceFrame v;v.version=1;v.service="abstraction.config/observer@1";v.method="Observe";enc_oaconfigobserverobservearguments(v.arguments,args,1);std::string frame;enc_oaserviceframe(frame,v,0);service_payload(frame);
+auto response=transport_.ExchangeFrame(frame);auto payload=service_response(response,v.service,v.method);Reader r{payload};r.depth=1;r.skip_ws();auto result=decode_oaconfigobserverobserveresult(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");
+return result.value;
+}
+};
+struct ConfigObserverService{inline static constexpr std::string_view wire_name="abstraction.config/observer@1";inline static constexpr std::string_view capability="abstraction.config";template<class Transport>using Client=ConfigObserverClient<Transport>;};
+struct ConfigObserverDispatcher:FrameWriter,FrameExchanger{ConfigObserver&handler;explicit ConfigObserverDispatcher(ConfigObserver&h):handler(h){}
+void WriteFrame(std::string_view frame)override{auto v=service_payload(frame);if(v.service!="abstraction.config/observer@1")throw DispatchError("unknown_service");
+if(v.method=="Observe"){
+throw DispatchError("wrong_mode");}
+throw DispatchError("unknown_method");}
+std::string ExchangeFrame(std::string_view frame)override{auto v=service_payload(frame);if(v.service!="abstraction.config/observer@1"){ServiceError e("unknown_service","");return service_reply(v,"",&e);}
+try{
+if(v.method=="Observe"){
+Reader r{v.arguments};r.depth=1;r.skip_ws();auto args=decode_oaconfigobserverobservearguments(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");auto payload=invoke_Observe(args);return service_reply(v,payload);}
+throw ServiceError("unknown_method","");}catch(const ServiceError&e){return service_reply(v,"",&e);}catch(const Refusal&e){ServiceError error(e.word,"");return service_reply(v,"",&error);}
+}
+Raw invoke_Observe(const OAConfigObserverObserveArguments&args){
+ConfigObservation result{};
+try{
+result=handler.Observe(args.overrides,args.cursor,args.wait_ms);
+}catch(const ServiceError&){throw;}catch(...){throw ServiceError("handler_error","handler failed");}
+try{
+OAConfigObserverObserveResult value;
+value.value=result;
+Raw payload;enc_oaconfigobserverobserveresult(payload,value,1);Reader r{payload};r.depth=1;r.skip_ws();decode_oaconfigobserverobserveresult(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");return payload;
 }catch(...){throw ServiceError("invalid_result","");}
 }
 };

@@ -60,6 +60,9 @@ type Subscription struct {
 }
 
 // Watch reports the machine's answer whenever it changes.
+//
+// Deprecated: this explicitly selected embedded-provider API reads local files.
+// Applications should observe snapshots through a resolved config reader.
 func Watch() *Subscription { return WatchQuiet(0) }
 
 // WatchQuiet also reports quiet once nothing has changed for budget.
@@ -150,8 +153,9 @@ func (s *Subscription) Close() error {
 }
 
 var live struct {
-	mu   sync.Mutex
-	subs map[*Subscription]bool
+	mu            sync.Mutex
+	subs          map[*Subscription]bool
+	invalidations map[*InvalidationSubscription]bool
 }
 
 func register(s *Subscription) {
@@ -179,7 +183,14 @@ func announce() {
 	for s := range live.subs {
 		subs = append(subs, s)
 	}
+	invalidations := make([]*InvalidationSubscription, 0, len(live.invalidations))
+	for subscription := range live.invalidations {
+		invalidations = append(invalidations, subscription)
+	}
 	live.mu.Unlock()
+	for _, subscription := range invalidations {
+		subscription.signal()
+	}
 	if len(subs) == 0 {
 		return
 	}
@@ -207,4 +218,63 @@ func watchable() []string {
 		}
 	}
 	return out
+}
+
+// InvalidationSubscription reports possible changes without loading values.
+// Services reread their selected bounded storage after a notification. Signals
+// coalesce; they cover existing native watcher locations and in-process edits.
+type InvalidationSubscription struct {
+	changes chan struct{}
+	done    chan struct{}
+	cancel  context.CancelFunc
+	stop    func()
+	once    sync.Once
+	mu      sync.Mutex
+	closed  bool
+}
+
+// WatchInvalidations reuses native directory notification and edit announcements.
+// It refuses an unavailable native mechanism; it never installs a polling fallback.
+func WatchInvalidations() (*InvalidationSubscription, error) {
+	events, stop, e := notifyDirs(watchable())
+	if e != nil {
+		return nil, e
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	s := &InvalidationSubscription{changes: make(chan struct{}, 1), done: make(chan struct{}), cancel: cancel, stop: stop}
+	live.mu.Lock()
+	if live.invalidations == nil {
+		live.invalidations = map[*InvalidationSubscription]bool{}
+	}
+	live.invalidations[s] = true
+	live.mu.Unlock()
+	go func() {
+		defer close(s.done)
+		defer func() { s.mu.Lock(); s.closed = true; close(s.changes); s.mu.Unlock() }()
+		watch.Settle(ctx, events, settle, s.signal)
+	}()
+	return s, nil
+}
+func (s *InvalidationSubscription) Changes() <-chan struct{} { return s.changes }
+func (s *InvalidationSubscription) signal() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return
+	}
+	select {
+	case s.changes <- struct{}{}:
+	default:
+	}
+}
+func (s *InvalidationSubscription) Close() error {
+	s.once.Do(func() {
+		live.mu.Lock()
+		delete(live.invalidations, s)
+		live.mu.Unlock()
+		s.cancel()
+		s.stop()
+		<-s.done
+	})
+	return nil
 }

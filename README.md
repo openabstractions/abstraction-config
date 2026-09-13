@@ -23,18 +23,16 @@ the caller's. A missing service returns an error; clients do not fall back to
 reading files. `ABSTRACTION_CONFIG_ENDPOINT` selects a nondefault endpoint.
 The original `Load` provider described below remains available separately.
 
-## The problem
+## Service ownership and provider implementation
 
-The other layers delegate work to whatever is installed: a download goes to a
-NAS if one is set up, otherwise to the operating system's transfer service,
-otherwise to the calling process. That only helps if a program which knows
-nothing about any of it can discover what is available. Reading environment
-variables does not achieve that — a GUI launched from a Start Menu shortcut
-inherits none, and asking every application to be separately configured moves
-the problem instead of solving it. This layer puts the answer in a file that a
-setup step writes once per machine and every process afterwards reads. `Load()`
-never fails; a machine with nothing set up reports no optional services, which
-is a normal answer.
+Applications obtain settings and provenance through the service API. The primary
+facade resolves that service; it reads no shared configuration file during
+`Discover()`. The runtime's resolver supplies capability availability separately.
+Configuration values are settings, and grant no authority to perform an operation.
+
+The `Load()` API and file formats below describe the service's provider and
+explicit legacy integrations. Their permissive defaults are provider behavior.
+The service client reports an unavailable service as an error.
 
 ## Words
 
@@ -179,7 +177,7 @@ writes the file. Above:
 [abstraction-download](https://github.com/openabstractions/abstraction-download)
 reads which store and which tiers a machine has, and
 [abstraction-facade](https://github.com/openabstractions/abstraction-facade)
-reads it once at `Discover()`.
+resolves the service through `ResolveConfig`; shared files stay with the provider.
 
 One layer of [openabstractions](https://github.com/openabstractions/abstractions).
 Every layer names one thing local tools rebuild on their own; the name means the

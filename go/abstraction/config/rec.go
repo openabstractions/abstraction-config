@@ -207,6 +207,30 @@ func strmap(out []byte, m map[string]string, depth int) []byte {
 	return append(out, '}')
 }
 
+var UserReplaceOutcomeNames = []string{"applied", "conflict"}
+
+const UserReplaceOutcomeApplied = "applied"
+
+const UserReplaceOutcomeConflict = "conflict"
+
+const UserReplaceOutcomeUnknown = "refuse"
+
+var ConfigObservationOutcomeNames = []string{"snapshot", "unchanged", "gap", "unavailable", "unsupported", "invalid"}
+
+const ConfigObservationOutcomeSnapshot = "snapshot"
+
+const ConfigObservationOutcomeUnchanged = "unchanged"
+
+const ConfigObservationOutcomeGap = "gap"
+
+const ConfigObservationOutcomeUnavailable = "unavailable"
+
+const ConfigObservationOutcomeUnsupported = "unsupported"
+
+const ConfigObservationOutcomeInvalid = "invalid"
+
+const ConfigObservationOutcomeUnknown = "refuse"
+
 type RunOverrides struct {
 	NasStore   string
 	Store      string
@@ -237,8 +261,46 @@ type Snapshot struct {
 	Stamp      string
 }
 
+type UserSettings struct {
+	NasStore   string
+	Store      string
+	LogSink    string
+	LogService string
+	Off        map[string]string
+}
+
+type UserSnapshot struct {
+	Values   UserSettings
+	Revision string
+}
+
+type UserReplaceResult struct {
+	Outcome  string
+	Snapshot UserSnapshot
+}
+
+type ConfigObservation struct {
+	Outcome  string
+	Cursor   string
+	Snapshot *Snapshot
+}
+
 type OAConfigReaderReadArguments struct {
 	Overrides RunOverrides
+}
+
+type OAConfigEditorReadUserArguments struct {
+}
+
+type OAConfigEditorReplaceUserArguments struct {
+	ExpectedRevision string
+	Values           UserSettings
+}
+
+type OAConfigObserverObserveArguments struct {
+	Overrides RunOverrides
+	Cursor    string
+	WaitMs    int64
 }
 
 type OAServiceFrame struct {
@@ -263,6 +325,18 @@ type OAServiceError struct {
 
 type OAConfigReaderReadResult struct {
 	Value Snapshot
+}
+
+type OAConfigEditorReadUserResult struct {
+	Value UserSnapshot
+}
+
+type OAConfigEditorReplaceUserResult struct {
+	Value UserReplaceResult
+}
+
+type OAConfigObserverObserveResult struct {
+	Value ConfigObservation
 }
 
 func encRunOverrides(out []byte, v *RunOverrides, depth int) []byte {
@@ -397,6 +471,110 @@ func encSnapshot(out []byte, v *Snapshot, depth int) []byte {
 	return append(out, '}')
 }
 
+func encUserSettings(out []byte, v *UserSettings, depth int) []byte {
+	out = append(out, '{')
+	out = append(out, '\n')
+	out = pad(out, depth+1)
+	out = esc(out, "nas_store")
+	out = append(out, ':', ' ')
+	out = esc(out, v.NasStore)
+	out = append(out, ',')
+	out = append(out, '\n')
+	out = pad(out, depth+1)
+	out = esc(out, "store")
+	out = append(out, ':', ' ')
+	out = esc(out, v.Store)
+	out = append(out, ',')
+	out = append(out, '\n')
+	out = pad(out, depth+1)
+	out = esc(out, "log_sink")
+	out = append(out, ':', ' ')
+	out = esc(out, v.LogSink)
+	out = append(out, ',')
+	out = append(out, '\n')
+	out = pad(out, depth+1)
+	out = esc(out, "log_service")
+	out = append(out, ':', ' ')
+	out = esc(out, v.LogService)
+	out = append(out, ',')
+	out = append(out, '\n')
+	out = pad(out, depth+1)
+	out = esc(out, "off")
+	out = append(out, ':', ' ')
+	out = strmap(out, v.Off, depth+1)
+	out = append(out, '\n')
+	out = pad(out, depth)
+	return append(out, '}')
+}
+
+func encUserSnapshot(out []byte, v *UserSnapshot, depth int) []byte {
+	out = append(out, '{')
+	out = append(out, '\n')
+	out = pad(out, depth+1)
+	out = esc(out, "values")
+	out = append(out, ':', ' ')
+	out = encUserSettings(out, &v.Values, depth+1)
+	out = append(out, ',')
+	out = append(out, '\n')
+	out = pad(out, depth+1)
+	out = esc(out, "revision")
+	out = append(out, ':', ' ')
+	out = esc(out, v.Revision)
+	out = append(out, '\n')
+	out = pad(out, depth)
+	return append(out, '}')
+}
+
+func encUserReplaceResult(out []byte, v *UserReplaceResult, depth int) []byte {
+	if v.Outcome != "applied" && v.Outcome != "conflict" {
+		panic(&Refusal{Word: "bad_enum", Offset: 0})
+	}
+	out = append(out, '{')
+	out = append(out, '\n')
+	out = pad(out, depth+1)
+	out = esc(out, "outcome")
+	out = append(out, ':', ' ')
+	out = esc(out, v.Outcome)
+	out = append(out, ',')
+	out = append(out, '\n')
+	out = pad(out, depth+1)
+	out = esc(out, "snapshot")
+	out = append(out, ':', ' ')
+	out = encUserSnapshot(out, &v.Snapshot, depth+1)
+	out = append(out, '\n')
+	out = pad(out, depth)
+	return append(out, '}')
+}
+
+func encConfigObservation(out []byte, v *ConfigObservation, depth int) []byte {
+	if v.Outcome != "snapshot" && v.Outcome != "unchanged" && v.Outcome != "gap" && v.Outcome != "unavailable" && v.Outcome != "unsupported" && v.Outcome != "invalid" {
+		panic(&Refusal{Word: "bad_enum", Offset: 0})
+	}
+	out = append(out, '{')
+	out = append(out, '\n')
+	out = pad(out, depth+1)
+	out = esc(out, "outcome")
+	out = append(out, ':', ' ')
+	out = esc(out, v.Outcome)
+	out = append(out, ',')
+	out = append(out, '\n')
+	out = pad(out, depth+1)
+	out = esc(out, "cursor")
+	out = append(out, ':', ' ')
+	out = esc(out, v.Cursor)
+	if v.Snapshot != nil {
+		out = append(out, ',')
+		out = append(out, '\n')
+		out = pad(out, depth+1)
+		out = esc(out, "snapshot")
+		out = append(out, ':', ' ')
+		out = encSnapshot(out, v.Snapshot, depth+1)
+	}
+	out = append(out, '\n')
+	out = pad(out, depth)
+	return append(out, '}')
+}
+
 func encOAConfigReaderReadArguments(out []byte, v *OAConfigReaderReadArguments, depth int) []byte {
 	out = append(out, '{')
 	out = append(out, '\n')
@@ -404,6 +582,53 @@ func encOAConfigReaderReadArguments(out []byte, v *OAConfigReaderReadArguments, 
 	out = esc(out, "overrides")
 	out = append(out, ':', ' ')
 	out = encRunOverrides(out, &v.Overrides, depth+1)
+	out = append(out, '\n')
+	out = pad(out, depth)
+	return append(out, '}')
+}
+
+func encOAConfigEditorReadUserArguments(out []byte, v *OAConfigEditorReadUserArguments, depth int) []byte {
+	out = append(out, '{')
+	return append(out, '}')
+}
+
+func encOAConfigEditorReplaceUserArguments(out []byte, v *OAConfigEditorReplaceUserArguments, depth int) []byte {
+	out = append(out, '{')
+	out = append(out, '\n')
+	out = pad(out, depth+1)
+	out = esc(out, "expected_revision")
+	out = append(out, ':', ' ')
+	out = esc(out, v.ExpectedRevision)
+	out = append(out, ',')
+	out = append(out, '\n')
+	out = pad(out, depth+1)
+	out = esc(out, "values")
+	out = append(out, ':', ' ')
+	out = encUserSettings(out, &v.Values, depth+1)
+	out = append(out, '\n')
+	out = pad(out, depth)
+	return append(out, '}')
+}
+
+func encOAConfigObserverObserveArguments(out []byte, v *OAConfigObserverObserveArguments, depth int) []byte {
+	out = append(out, '{')
+	out = append(out, '\n')
+	out = pad(out, depth+1)
+	out = esc(out, "overrides")
+	out = append(out, ':', ' ')
+	out = encRunOverrides(out, &v.Overrides, depth+1)
+	out = append(out, ',')
+	out = append(out, '\n')
+	out = pad(out, depth+1)
+	out = esc(out, "cursor")
+	out = append(out, ':', ' ')
+	out = esc(out, v.Cursor)
+	out = append(out, ',')
+	out = append(out, '\n')
+	out = pad(out, depth+1)
+	out = esc(out, "wait_ms")
+	out = append(out, ':', ' ')
+	out = num(out, v.WaitMs)
 	out = append(out, '\n')
 	out = pad(out, depth)
 	return append(out, '}')
@@ -504,6 +729,42 @@ func encOAConfigReaderReadResult(out []byte, v *OAConfigReaderReadResult, depth 
 	out = esc(out, "value")
 	out = append(out, ':', ' ')
 	out = encSnapshot(out, &v.Value, depth+1)
+	out = append(out, '\n')
+	out = pad(out, depth)
+	return append(out, '}')
+}
+
+func encOAConfigEditorReadUserResult(out []byte, v *OAConfigEditorReadUserResult, depth int) []byte {
+	out = append(out, '{')
+	out = append(out, '\n')
+	out = pad(out, depth+1)
+	out = esc(out, "value")
+	out = append(out, ':', ' ')
+	out = encUserSnapshot(out, &v.Value, depth+1)
+	out = append(out, '\n')
+	out = pad(out, depth)
+	return append(out, '}')
+}
+
+func encOAConfigEditorReplaceUserResult(out []byte, v *OAConfigEditorReplaceUserResult, depth int) []byte {
+	out = append(out, '{')
+	out = append(out, '\n')
+	out = pad(out, depth+1)
+	out = esc(out, "value")
+	out = append(out, ':', ' ')
+	out = encUserReplaceResult(out, &v.Value, depth+1)
+	out = append(out, '\n')
+	out = pad(out, depth)
+	return append(out, '}')
+}
+
+func encOAConfigObserverObserveResult(out []byte, v *OAConfigObserverObserveResult, depth int) []byte {
+	out = append(out, '{')
+	out = append(out, '\n')
+	out = pad(out, depth+1)
+	out = esc(out, "value")
+	out = append(out, ':', ' ')
+	out = encConfigObservation(out, &v.Value, depth+1)
 	out = append(out, '\n')
 	out = pad(out, depth)
 	return append(out, '}')
@@ -1406,6 +1667,328 @@ func (r *reader) decodeSnapshot() (*Snapshot, error) {
 	return v, nil
 }
 
+func (r *reader) decodeUserSettings() (*UserSettings, error) {
+	if r.at() != '{' {
+		return nil, r.refuse("wrong_type")
+	}
+	if err := r.enter(); err != nil {
+		return nil, err
+	}
+	r.pos++
+	v := &UserSettings{}
+	var seen uint32
+	r.ws()
+	if r.at() != '}' {
+		for {
+			r.ws()
+			if r.at() != '"' {
+				return nil, r.refuse("malformed")
+			}
+			key, err := r.str()
+			if err != nil {
+				return nil, err
+			}
+			r.ws()
+			if r.at() != ':' {
+				return nil, r.refuse("malformed")
+			}
+			r.pos++
+			r.ws()
+			switch key {
+			case "nas_store":
+				if seen&1 != 0 {
+					return nil, r.refuse("duplicate_field")
+				}
+				seen |= 1
+				x, err := r.str()
+				if err != nil {
+					return nil, err
+				}
+				v.NasStore = x
+			case "store":
+				if seen&2 != 0 {
+					return nil, r.refuse("duplicate_field")
+				}
+				seen |= 2
+				x, err := r.str()
+				if err != nil {
+					return nil, err
+				}
+				v.Store = x
+			case "log_sink":
+				if seen&4 != 0 {
+					return nil, r.refuse("duplicate_field")
+				}
+				seen |= 4
+				x, err := r.str()
+				if err != nil {
+					return nil, err
+				}
+				v.LogSink = x
+			case "log_service":
+				if seen&8 != 0 {
+					return nil, r.refuse("duplicate_field")
+				}
+				seen |= 8
+				x, err := r.str()
+				if err != nil {
+					return nil, err
+				}
+				v.LogService = x
+			case "off":
+				if seen&16 != 0 {
+					return nil, r.refuse("duplicate_field")
+				}
+				seen |= 16
+				x, err := r.strMap()
+				if err != nil {
+					return nil, err
+				}
+				v.Off = x
+			default:
+				return nil, r.refuse("unknown_field")
+			}
+			r.ws()
+			if r.at() != ',' {
+				break
+			}
+			r.pos++
+		}
+	}
+	if r.at() != '}' {
+		return nil, r.refuse("malformed")
+	}
+	r.pos++
+	r.depth--
+	if seen&31 != 31 {
+		return nil, r.refuse("missing_field")
+	}
+	return v, nil
+}
+
+func (r *reader) decodeUserSnapshot() (*UserSnapshot, error) {
+	if r.at() != '{' {
+		return nil, r.refuse("wrong_type")
+	}
+	if err := r.enter(); err != nil {
+		return nil, err
+	}
+	r.pos++
+	v := &UserSnapshot{}
+	var seen uint32
+	r.ws()
+	if r.at() != '}' {
+		for {
+			r.ws()
+			if r.at() != '"' {
+				return nil, r.refuse("malformed")
+			}
+			key, err := r.str()
+			if err != nil {
+				return nil, err
+			}
+			r.ws()
+			if r.at() != ':' {
+				return nil, r.refuse("malformed")
+			}
+			r.pos++
+			r.ws()
+			switch key {
+			case "values":
+				if seen&1 != 0 {
+					return nil, r.refuse("duplicate_field")
+				}
+				seen |= 1
+				x, err := r.decodeUserSettings()
+				if err != nil {
+					return nil, err
+				}
+				v.Values = *x
+			case "revision":
+				if seen&2 != 0 {
+					return nil, r.refuse("duplicate_field")
+				}
+				seen |= 2
+				x, err := r.str()
+				if err != nil {
+					return nil, err
+				}
+				v.Revision = x
+			default:
+				return nil, r.refuse("unknown_field")
+			}
+			r.ws()
+			if r.at() != ',' {
+				break
+			}
+			r.pos++
+		}
+	}
+	if r.at() != '}' {
+		return nil, r.refuse("malformed")
+	}
+	r.pos++
+	r.depth--
+	if seen&3 != 3 {
+		return nil, r.refuse("missing_field")
+	}
+	return v, nil
+}
+
+func (r *reader) decodeUserReplaceResult() (*UserReplaceResult, error) {
+	if r.at() != '{' {
+		return nil, r.refuse("wrong_type")
+	}
+	if err := r.enter(); err != nil {
+		return nil, err
+	}
+	r.pos++
+	v := &UserReplaceResult{}
+	var seen uint32
+	r.ws()
+	if r.at() != '}' {
+		for {
+			r.ws()
+			if r.at() != '"' {
+				return nil, r.refuse("malformed")
+			}
+			key, err := r.str()
+			if err != nil {
+				return nil, err
+			}
+			r.ws()
+			if r.at() != ':' {
+				return nil, r.refuse("malformed")
+			}
+			r.pos++
+			r.ws()
+			switch key {
+			case "outcome":
+				if seen&1 != 0 {
+					return nil, r.refuse("duplicate_field")
+				}
+				seen |= 1
+				x, err := r.str()
+				if err != nil {
+					return nil, err
+				}
+				v.Outcome = x
+			case "snapshot":
+				if seen&2 != 0 {
+					return nil, r.refuse("duplicate_field")
+				}
+				seen |= 2
+				x, err := r.decodeUserSnapshot()
+				if err != nil {
+					return nil, err
+				}
+				v.Snapshot = *x
+			default:
+				return nil, r.refuse("unknown_field")
+			}
+			r.ws()
+			if r.at() != ',' {
+				break
+			}
+			r.pos++
+		}
+	}
+	if r.at() != '}' {
+		return nil, r.refuse("malformed")
+	}
+	r.pos++
+	r.depth--
+	if seen&3 != 3 {
+		return nil, r.refuse("missing_field")
+	}
+	if v.Outcome != "applied" && v.Outcome != "conflict" {
+		return nil, r.refuse("bad_enum")
+	}
+	return v, nil
+}
+
+func (r *reader) decodeConfigObservation() (*ConfigObservation, error) {
+	if r.at() != '{' {
+		return nil, r.refuse("wrong_type")
+	}
+	if err := r.enter(); err != nil {
+		return nil, err
+	}
+	r.pos++
+	v := &ConfigObservation{}
+	var seen uint32
+	r.ws()
+	if r.at() != '}' {
+		for {
+			r.ws()
+			if r.at() != '"' {
+				return nil, r.refuse("malformed")
+			}
+			key, err := r.str()
+			if err != nil {
+				return nil, err
+			}
+			r.ws()
+			if r.at() != ':' {
+				return nil, r.refuse("malformed")
+			}
+			r.pos++
+			r.ws()
+			switch key {
+			case "outcome":
+				if seen&1 != 0 {
+					return nil, r.refuse("duplicate_field")
+				}
+				seen |= 1
+				x, err := r.str()
+				if err != nil {
+					return nil, err
+				}
+				v.Outcome = x
+			case "cursor":
+				if seen&2 != 0 {
+					return nil, r.refuse("duplicate_field")
+				}
+				seen |= 2
+				x, err := r.str()
+				if err != nil {
+					return nil, err
+				}
+				v.Cursor = x
+			case "snapshot":
+				if seen&4 != 0 {
+					return nil, r.refuse("duplicate_field")
+				}
+				seen |= 4
+				x, err := r.decodeSnapshot()
+				if err != nil {
+					return nil, err
+				}
+				v.Snapshot = x
+			default:
+				return nil, r.refuse("unknown_field")
+			}
+			r.ws()
+			if r.at() != ',' {
+				break
+			}
+			r.pos++
+		}
+	}
+	if r.at() != '}' {
+		return nil, r.refuse("malformed")
+	}
+	r.pos++
+	r.depth--
+	if seen&3 != 3 {
+		return nil, r.refuse("missing_field")
+	}
+	if v.Outcome != "snapshot" && v.Outcome != "unchanged" && v.Outcome != "gap" && v.Outcome != "unavailable" && v.Outcome != "unsupported" && v.Outcome != "invalid" {
+		return nil, r.refuse("bad_enum")
+	}
+	return v, nil
+}
+
 func (r *reader) decodeOAConfigReaderReadArguments() (*OAConfigReaderReadArguments, error) {
 	if r.at() != '{' {
 		return nil, r.refuse("wrong_type")
@@ -1460,6 +2043,199 @@ func (r *reader) decodeOAConfigReaderReadArguments() (*OAConfigReaderReadArgumen
 	r.pos++
 	r.depth--
 	if seen&1 != 1 {
+		return nil, r.refuse("missing_field")
+	}
+	return v, nil
+}
+
+func (r *reader) decodeOAConfigEditorReadUserArguments() (*OAConfigEditorReadUserArguments, error) {
+	if r.at() != '{' {
+		return nil, r.refuse("wrong_type")
+	}
+	if err := r.enter(); err != nil {
+		return nil, err
+	}
+	r.pos++
+	v := &OAConfigEditorReadUserArguments{}
+	r.ws()
+	if r.at() != '}' {
+		for {
+			r.ws()
+			if r.at() != '"' {
+				return nil, r.refuse("malformed")
+			}
+			key, err := r.str()
+			if err != nil {
+				return nil, err
+			}
+			r.ws()
+			if r.at() != ':' {
+				return nil, r.refuse("malformed")
+			}
+			r.pos++
+			r.ws()
+			switch key {
+			default:
+				return nil, r.refuse("unknown_field")
+			}
+			r.ws()
+			if r.at() != ',' {
+				break
+			}
+			r.pos++
+		}
+	}
+	if r.at() != '}' {
+		return nil, r.refuse("malformed")
+	}
+	r.pos++
+	r.depth--
+	return v, nil
+}
+
+func (r *reader) decodeOAConfigEditorReplaceUserArguments() (*OAConfigEditorReplaceUserArguments, error) {
+	if r.at() != '{' {
+		return nil, r.refuse("wrong_type")
+	}
+	if err := r.enter(); err != nil {
+		return nil, err
+	}
+	r.pos++
+	v := &OAConfigEditorReplaceUserArguments{}
+	var seen uint32
+	r.ws()
+	if r.at() != '}' {
+		for {
+			r.ws()
+			if r.at() != '"' {
+				return nil, r.refuse("malformed")
+			}
+			key, err := r.str()
+			if err != nil {
+				return nil, err
+			}
+			r.ws()
+			if r.at() != ':' {
+				return nil, r.refuse("malformed")
+			}
+			r.pos++
+			r.ws()
+			switch key {
+			case "expected_revision":
+				if seen&1 != 0 {
+					return nil, r.refuse("duplicate_field")
+				}
+				seen |= 1
+				x, err := r.str()
+				if err != nil {
+					return nil, err
+				}
+				v.ExpectedRevision = x
+			case "values":
+				if seen&2 != 0 {
+					return nil, r.refuse("duplicate_field")
+				}
+				seen |= 2
+				x, err := r.decodeUserSettings()
+				if err != nil {
+					return nil, err
+				}
+				v.Values = *x
+			default:
+				return nil, r.refuse("unknown_field")
+			}
+			r.ws()
+			if r.at() != ',' {
+				break
+			}
+			r.pos++
+		}
+	}
+	if r.at() != '}' {
+		return nil, r.refuse("malformed")
+	}
+	r.pos++
+	r.depth--
+	if seen&3 != 3 {
+		return nil, r.refuse("missing_field")
+	}
+	return v, nil
+}
+
+func (r *reader) decodeOAConfigObserverObserveArguments() (*OAConfigObserverObserveArguments, error) {
+	if r.at() != '{' {
+		return nil, r.refuse("wrong_type")
+	}
+	if err := r.enter(); err != nil {
+		return nil, err
+	}
+	r.pos++
+	v := &OAConfigObserverObserveArguments{}
+	var seen uint32
+	r.ws()
+	if r.at() != '}' {
+		for {
+			r.ws()
+			if r.at() != '"' {
+				return nil, r.refuse("malformed")
+			}
+			key, err := r.str()
+			if err != nil {
+				return nil, err
+			}
+			r.ws()
+			if r.at() != ':' {
+				return nil, r.refuse("malformed")
+			}
+			r.pos++
+			r.ws()
+			switch key {
+			case "overrides":
+				if seen&1 != 0 {
+					return nil, r.refuse("duplicate_field")
+				}
+				seen |= 1
+				x, err := r.decodeRunOverrides()
+				if err != nil {
+					return nil, err
+				}
+				v.Overrides = *x
+			case "cursor":
+				if seen&2 != 0 {
+					return nil, r.refuse("duplicate_field")
+				}
+				seen |= 2
+				x, err := r.str()
+				if err != nil {
+					return nil, err
+				}
+				v.Cursor = x
+			case "wait_ms":
+				if seen&4 != 0 {
+					return nil, r.refuse("duplicate_field")
+				}
+				seen |= 4
+				x, err := r.integer(-9223372036854775808, 9223372036854775807)
+				if err != nil {
+					return nil, err
+				}
+				v.WaitMs = x
+			default:
+				return nil, r.refuse("unknown_field")
+			}
+			r.ws()
+			if r.at() != ',' {
+				break
+			}
+			r.pos++
+		}
+	}
+	if r.at() != '}' {
+		return nil, r.refuse("malformed")
+	}
+	r.pos++
+	r.depth--
+	if seen&7 != 7 {
 		return nil, r.refuse("missing_field")
 	}
 	return v, nil
@@ -1781,6 +2557,183 @@ func (r *reader) decodeOAConfigReaderReadResult() (*OAConfigReaderReadResult, er
 	return v, nil
 }
 
+func (r *reader) decodeOAConfigEditorReadUserResult() (*OAConfigEditorReadUserResult, error) {
+	if r.at() != '{' {
+		return nil, r.refuse("wrong_type")
+	}
+	if err := r.enter(); err != nil {
+		return nil, err
+	}
+	r.pos++
+	v := &OAConfigEditorReadUserResult{}
+	var seen uint32
+	r.ws()
+	if r.at() != '}' {
+		for {
+			r.ws()
+			if r.at() != '"' {
+				return nil, r.refuse("malformed")
+			}
+			key, err := r.str()
+			if err != nil {
+				return nil, err
+			}
+			r.ws()
+			if r.at() != ':' {
+				return nil, r.refuse("malformed")
+			}
+			r.pos++
+			r.ws()
+			switch key {
+			case "value":
+				if seen&1 != 0 {
+					return nil, r.refuse("duplicate_field")
+				}
+				seen |= 1
+				x, err := r.decodeUserSnapshot()
+				if err != nil {
+					return nil, err
+				}
+				v.Value = *x
+			default:
+				return nil, r.refuse("unknown_field")
+			}
+			r.ws()
+			if r.at() != ',' {
+				break
+			}
+			r.pos++
+		}
+	}
+	if r.at() != '}' {
+		return nil, r.refuse("malformed")
+	}
+	r.pos++
+	r.depth--
+	if seen&1 != 1 {
+		return nil, r.refuse("missing_field")
+	}
+	return v, nil
+}
+
+func (r *reader) decodeOAConfigEditorReplaceUserResult() (*OAConfigEditorReplaceUserResult, error) {
+	if r.at() != '{' {
+		return nil, r.refuse("wrong_type")
+	}
+	if err := r.enter(); err != nil {
+		return nil, err
+	}
+	r.pos++
+	v := &OAConfigEditorReplaceUserResult{}
+	var seen uint32
+	r.ws()
+	if r.at() != '}' {
+		for {
+			r.ws()
+			if r.at() != '"' {
+				return nil, r.refuse("malformed")
+			}
+			key, err := r.str()
+			if err != nil {
+				return nil, err
+			}
+			r.ws()
+			if r.at() != ':' {
+				return nil, r.refuse("malformed")
+			}
+			r.pos++
+			r.ws()
+			switch key {
+			case "value":
+				if seen&1 != 0 {
+					return nil, r.refuse("duplicate_field")
+				}
+				seen |= 1
+				x, err := r.decodeUserReplaceResult()
+				if err != nil {
+					return nil, err
+				}
+				v.Value = *x
+			default:
+				return nil, r.refuse("unknown_field")
+			}
+			r.ws()
+			if r.at() != ',' {
+				break
+			}
+			r.pos++
+		}
+	}
+	if r.at() != '}' {
+		return nil, r.refuse("malformed")
+	}
+	r.pos++
+	r.depth--
+	if seen&1 != 1 {
+		return nil, r.refuse("missing_field")
+	}
+	return v, nil
+}
+
+func (r *reader) decodeOAConfigObserverObserveResult() (*OAConfigObserverObserveResult, error) {
+	if r.at() != '{' {
+		return nil, r.refuse("wrong_type")
+	}
+	if err := r.enter(); err != nil {
+		return nil, err
+	}
+	r.pos++
+	v := &OAConfigObserverObserveResult{}
+	var seen uint32
+	r.ws()
+	if r.at() != '}' {
+		for {
+			r.ws()
+			if r.at() != '"' {
+				return nil, r.refuse("malformed")
+			}
+			key, err := r.str()
+			if err != nil {
+				return nil, err
+			}
+			r.ws()
+			if r.at() != ':' {
+				return nil, r.refuse("malformed")
+			}
+			r.pos++
+			r.ws()
+			switch key {
+			case "value":
+				if seen&1 != 0 {
+					return nil, r.refuse("duplicate_field")
+				}
+				seen |= 1
+				x, err := r.decodeConfigObservation()
+				if err != nil {
+					return nil, err
+				}
+				v.Value = *x
+			default:
+				return nil, r.refuse("unknown_field")
+			}
+			r.ws()
+			if r.at() != ',' {
+				break
+			}
+			r.pos++
+		}
+	}
+	if r.at() != '}' {
+		return nil, r.refuse("malformed")
+	}
+	r.pos++
+	r.depth--
+	if seen&1 != 1 {
+		return nil, r.refuse("missing_field")
+	}
+	return v, nil
+}
+
 func Decode(in []byte) (*Snapshot, error) {
 	r := &reader{buf: in}
 	r.ws()
@@ -1797,7 +2750,7 @@ func Decode(in []byte) (*Snapshot, error) {
 
 // Refusals is in the order two of them are chosen between.
 
-var Refusals = []string{"malformed", "bad_string", "number_spelling", "wrong_type", "depth_exceeded", "duplicate_field", "unknown_field", "missing_field", "trailing_bytes"}
+var Refusals = []string{"malformed", "bad_string", "number_spelling", "wrong_type", "depth_exceeded", "duplicate_field", "unknown_field", "missing_field", "bad_enum", "trailing_bytes"}
 
 func RefusalRank(word string) int {
 	for i, w := range Refusals {
@@ -1828,6 +2781,16 @@ func servicePayload(frame []byte) (*OAServiceFrame, error) {
 		return nil, DispatchError("unknown_version")
 	}
 	return v, nil
+}
+
+// ServiceName validates the request envelope and version for routing. The chosen
+// generated dispatcher validates service, method and typed arguments before use.
+func ServiceName(frame []byte) (string, error) {
+	v, err := servicePayload(frame)
+	if err != nil {
+		return "", err
+	}
+	return v.Service, nil
 }
 
 // ExchangeFrame returns the response associated with this call. Correlation,
@@ -2036,6 +2999,356 @@ func (d *ConfigReaderDispatcher) invokeRead(args *OAConfigReaderReadArguments) (
 	r := &reader{buf: []byte(payload), depth: 1}
 	r.ws()
 	if _, e := r.decodeOAConfigReaderReadResult(); e != nil {
+		payload = ""
+		err = &ServiceError{Code: "invalid_result"}
+		return
+	}
+	r.ws()
+	if r.pos != len(r.buf) {
+		payload = ""
+		err = &ServiceError{Code: "invalid_result"}
+	}
+	return
+}
+
+type ConfigEditor interface {
+	ReadUser() (UserSnapshot, error)
+	ReplaceUser(string, UserSettings) (UserReplaceResult, error)
+}
+type ConfigEditorTransport interface {
+	FrameExchanger
+}
+type ConfigEditorClient struct{ transport ConfigEditorTransport }
+
+func NewConfigEditorClient(t ConfigEditorTransport) *ConfigEditorClient {
+	return &ConfigEditorClient{transport: t}
+}
+
+type ConfigEditorDispatcher struct{ Handler ConfigEditor }
+
+func (c *ConfigEditorClient) ReadUser() (result UserSnapshot, err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			if e, ok := p.(*Refusal); ok {
+				err = e
+			} else {
+				panic(p)
+			}
+		}
+	}()
+	args := OAConfigEditorReadUserArguments{}
+	v := OAServiceFrame{Version: 1, Service: "abstraction.config/editor@1", Method: "ReadUser", Arguments: Raw(encOAConfigEditorReadUserArguments(nil, &args, 1))}
+	frame := encOAServiceFrame(nil, &v, 0)
+	if _, err = servicePayload(frame); err != nil {
+		return
+	}
+	var response []byte
+	response, err = c.transport.ExchangeFrame(frame)
+	if err != nil {
+		return
+	}
+	var payload Raw
+	payload, err = serviceResponse(response, v.Service, v.Method)
+	if err != nil {
+		return
+	}
+	r := &reader{buf: []byte(payload), depth: 1}
+	r.ws()
+	var decoded *OAConfigEditorReadUserResult
+	decoded, err = r.decodeOAConfigEditorReadUserResult()
+	if err != nil {
+		return
+	}
+	_ = decoded
+	r.ws()
+	if r.pos != len(r.buf) {
+		err = r.refuse("trailing_bytes")
+		return
+	}
+	result = decoded.Value
+	return
+}
+func (c *ConfigEditorClient) ReplaceUser(arg0 string, arg1 UserSettings) (result UserReplaceResult, err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			if e, ok := p.(*Refusal); ok {
+				err = e
+			} else {
+				panic(p)
+			}
+		}
+	}()
+	args := OAConfigEditorReplaceUserArguments{ExpectedRevision: arg0, Values: arg1}
+	v := OAServiceFrame{Version: 1, Service: "abstraction.config/editor@1", Method: "ReplaceUser", Arguments: Raw(encOAConfigEditorReplaceUserArguments(nil, &args, 1))}
+	frame := encOAServiceFrame(nil, &v, 0)
+	if _, err = servicePayload(frame); err != nil {
+		return
+	}
+	var response []byte
+	response, err = c.transport.ExchangeFrame(frame)
+	if err != nil {
+		return
+	}
+	var payload Raw
+	payload, err = serviceResponse(response, v.Service, v.Method)
+	if err != nil {
+		return
+	}
+	r := &reader{buf: []byte(payload), depth: 1}
+	r.ws()
+	var decoded *OAConfigEditorReplaceUserResult
+	decoded, err = r.decodeOAConfigEditorReplaceUserResult()
+	if err != nil {
+		return
+	}
+	_ = decoded
+	r.ws()
+	if r.pos != len(r.buf) {
+		err = r.refuse("trailing_bytes")
+		return
+	}
+	result = decoded.Value
+	return
+}
+func (d *ConfigEditorDispatcher) WriteFrame(frame []byte) error {
+	v, err := servicePayload(frame)
+	if err != nil {
+		return err
+	}
+	if v.Service != "abstraction.config/editor@1" {
+		return DispatchError("unknown_service")
+	}
+	switch v.Method {
+	case "ReadUser":
+		return DispatchError("wrong_mode")
+	case "ReplaceUser":
+		return DispatchError("wrong_mode")
+	default:
+		return DispatchError("unknown_method")
+	}
+}
+func (d *ConfigEditorDispatcher) ExchangeFrame(frame []byte) ([]byte, error) {
+	v, err := servicePayload(frame)
+	if err != nil {
+		return nil, err
+	}
+	if v.Service != "abstraction.config/editor@1" {
+		return serviceReply(v, "", DispatchError("unknown_service"))
+	}
+	switch v.Method {
+	case "ReadUser":
+		r := &reader{buf: []byte(v.Arguments), depth: 1}
+		r.ws()
+		args, err := r.decodeOAConfigEditorReadUserArguments()
+		if err != nil {
+			return serviceReply(v, "", err)
+		}
+		r.ws()
+		if r.pos != len(r.buf) {
+			return serviceReply(v, "", r.refuse("trailing_bytes"))
+		}
+		payload, err := d.invokeReadUser(args)
+		return serviceReply(v, payload, err)
+	case "ReplaceUser":
+		r := &reader{buf: []byte(v.Arguments), depth: 1}
+		r.ws()
+		args, err := r.decodeOAConfigEditorReplaceUserArguments()
+		if err != nil {
+			return serviceReply(v, "", err)
+		}
+		r.ws()
+		if r.pos != len(r.buf) {
+			return serviceReply(v, "", r.refuse("trailing_bytes"))
+		}
+		payload, err := d.invokeReplaceUser(args)
+		return serviceReply(v, payload, err)
+	default:
+		return serviceReply(v, "", DispatchError("unknown_method"))
+	}
+}
+func (d *ConfigEditorDispatcher) invokeReadUser(args *OAConfigEditorReadUserArguments) (payload Raw, err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			payload = ""
+			if _, ok := p.(*Refusal); ok {
+				err = &ServiceError{Code: "invalid_result"}
+			} else {
+				err = &ServiceError{Code: "handler_error", Message: "handler failed"}
+			}
+		}
+	}()
+	var result UserSnapshot
+	result, err = d.Handler.ReadUser()
+	if err != nil {
+		return
+	}
+	value := OAConfigEditorReadUserResult{Value: result}
+	payload = Raw(encOAConfigEditorReadUserResult(nil, &value, 1))
+	r := &reader{buf: []byte(payload), depth: 1}
+	r.ws()
+	if _, e := r.decodeOAConfigEditorReadUserResult(); e != nil {
+		payload = ""
+		err = &ServiceError{Code: "invalid_result"}
+		return
+	}
+	r.ws()
+	if r.pos != len(r.buf) {
+		payload = ""
+		err = &ServiceError{Code: "invalid_result"}
+	}
+	return
+}
+func (d *ConfigEditorDispatcher) invokeReplaceUser(args *OAConfigEditorReplaceUserArguments) (payload Raw, err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			payload = ""
+			if _, ok := p.(*Refusal); ok {
+				err = &ServiceError{Code: "invalid_result"}
+			} else {
+				err = &ServiceError{Code: "handler_error", Message: "handler failed"}
+			}
+		}
+	}()
+	var result UserReplaceResult
+	result, err = d.Handler.ReplaceUser(args.ExpectedRevision, args.Values)
+	if err != nil {
+		return
+	}
+	value := OAConfigEditorReplaceUserResult{Value: result}
+	payload = Raw(encOAConfigEditorReplaceUserResult(nil, &value, 1))
+	r := &reader{buf: []byte(payload), depth: 1}
+	r.ws()
+	if _, e := r.decodeOAConfigEditorReplaceUserResult(); e != nil {
+		payload = ""
+		err = &ServiceError{Code: "invalid_result"}
+		return
+	}
+	r.ws()
+	if r.pos != len(r.buf) {
+		payload = ""
+		err = &ServiceError{Code: "invalid_result"}
+	}
+	return
+}
+
+type ConfigObserver interface {
+	Observe(RunOverrides, string, int64) (ConfigObservation, error)
+}
+type ConfigObserverTransport interface {
+	FrameExchanger
+}
+type ConfigObserverClient struct{ transport ConfigObserverTransport }
+
+func NewConfigObserverClient(t ConfigObserverTransport) *ConfigObserverClient {
+	return &ConfigObserverClient{transport: t}
+}
+
+type ConfigObserverDispatcher struct{ Handler ConfigObserver }
+
+func (c *ConfigObserverClient) Observe(arg0 RunOverrides, arg1 string, arg2 int64) (result ConfigObservation, err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			if e, ok := p.(*Refusal); ok {
+				err = e
+			} else {
+				panic(p)
+			}
+		}
+	}()
+	args := OAConfigObserverObserveArguments{Overrides: arg0, Cursor: arg1, WaitMs: arg2}
+	v := OAServiceFrame{Version: 1, Service: "abstraction.config/observer@1", Method: "Observe", Arguments: Raw(encOAConfigObserverObserveArguments(nil, &args, 1))}
+	frame := encOAServiceFrame(nil, &v, 0)
+	if _, err = servicePayload(frame); err != nil {
+		return
+	}
+	var response []byte
+	response, err = c.transport.ExchangeFrame(frame)
+	if err != nil {
+		return
+	}
+	var payload Raw
+	payload, err = serviceResponse(response, v.Service, v.Method)
+	if err != nil {
+		return
+	}
+	r := &reader{buf: []byte(payload), depth: 1}
+	r.ws()
+	var decoded *OAConfigObserverObserveResult
+	decoded, err = r.decodeOAConfigObserverObserveResult()
+	if err != nil {
+		return
+	}
+	_ = decoded
+	r.ws()
+	if r.pos != len(r.buf) {
+		err = r.refuse("trailing_bytes")
+		return
+	}
+	result = decoded.Value
+	return
+}
+func (d *ConfigObserverDispatcher) WriteFrame(frame []byte) error {
+	v, err := servicePayload(frame)
+	if err != nil {
+		return err
+	}
+	if v.Service != "abstraction.config/observer@1" {
+		return DispatchError("unknown_service")
+	}
+	switch v.Method {
+	case "Observe":
+		return DispatchError("wrong_mode")
+	default:
+		return DispatchError("unknown_method")
+	}
+}
+func (d *ConfigObserverDispatcher) ExchangeFrame(frame []byte) ([]byte, error) {
+	v, err := servicePayload(frame)
+	if err != nil {
+		return nil, err
+	}
+	if v.Service != "abstraction.config/observer@1" {
+		return serviceReply(v, "", DispatchError("unknown_service"))
+	}
+	switch v.Method {
+	case "Observe":
+		r := &reader{buf: []byte(v.Arguments), depth: 1}
+		r.ws()
+		args, err := r.decodeOAConfigObserverObserveArguments()
+		if err != nil {
+			return serviceReply(v, "", err)
+		}
+		r.ws()
+		if r.pos != len(r.buf) {
+			return serviceReply(v, "", r.refuse("trailing_bytes"))
+		}
+		payload, err := d.invokeObserve(args)
+		return serviceReply(v, payload, err)
+	default:
+		return serviceReply(v, "", DispatchError("unknown_method"))
+	}
+}
+func (d *ConfigObserverDispatcher) invokeObserve(args *OAConfigObserverObserveArguments) (payload Raw, err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			payload = ""
+			if _, ok := p.(*Refusal); ok {
+				err = &ServiceError{Code: "invalid_result"}
+			} else {
+				err = &ServiceError{Code: "handler_error", Message: "handler failed"}
+			}
+		}
+	}()
+	var result ConfigObservation
+	result, err = d.Handler.Observe(args.Overrides, args.Cursor, args.WaitMs)
+	if err != nil {
+		return
+	}
+	value := OAConfigObserverObserveResult{Value: result}
+	payload = Raw(encOAConfigObserverObserveResult(nil, &value, 1))
+	r := &reader{buf: []byte(payload), depth: 1}
+	r.ws()
+	if _, e := r.decodeOAConfigObserverObserveResult(); e != nil {
 		payload = ""
 		err = &ServiceError{Code: "invalid_result"}
 		return

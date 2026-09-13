@@ -30,8 +30,8 @@
 <div class="wrap"><table>
 <thead><tr><th>kind</th><th>types</th></tr></thead>
 <tbody>
-<tr><td>built in</td><td><code>string</code></td></tr>
-<tr><td>declared below</td><td><code>Origin</code> <code>Origins</code></td></tr>
+<tr><td>built in</td><td><code>ConfigObservationOutcome</code> <code>UserReplaceOutcome</code> <code>string</code></td></tr>
+<tr><td>declared below</td><td><code>Origin</code> <code>Origins</code> <code>Snapshot</code> <code>UserSettings</code> <code>UserSnapshot</code></td></tr>
 <tr><td>string map <span class="tag">[DEF-A10]</span></td><td><code>map&lt;string,string&gt;</code></td></tr>
 </tbody></table></div>
 <h2 id="structs">Structs <span class="tag">[DEF-T1]</span></h2>
@@ -78,6 +78,65 @@
 <tr><td>6</td><td><code>origins</code></td><td><code>Origins</code></td><td>required</td><td>—</td></tr>
 <tr><td>7</td><td><code>stamp</code></td><td><code>string</code></td><td>required</td><td>—</td></tr>
 </tbody></table></div>
+<h3 id="struct-UserSettings"><code>UserSettings</code></h3>
+<p class="meta">unknown fields <code>refuse</code></p>
+<div class="wrap"><table>
+<thead><tr><th>id</th><th>field</th><th>type</th><th>presence</th><th>named elsewhere</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>nas_store</code></td><td><code>string</code></td><td>required</td><td>—</td></tr>
+<tr><td>2</td><td><code>store</code></td><td><code>string</code></td><td>required</td><td>—</td></tr>
+<tr><td>3</td><td><code>log_sink</code></td><td><code>string</code></td><td>required</td><td>—</td></tr>
+<tr><td>4</td><td><code>log_service</code></td><td><code>string</code></td><td>required</td><td>—</td></tr>
+<tr><td>5</td><td><code>off</code></td><td><code>map&lt;string,string&gt;</code></td><td>required</td><td>—</td></tr>
+</tbody></table></div>
+<h3 id="struct-UserSnapshot"><code>UserSnapshot</code></h3>
+<p class="meta">unknown fields <code>refuse</code></p>
+<div class="wrap"><table>
+<thead><tr><th>id</th><th>field</th><th>type</th><th>presence</th><th>named elsewhere</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>values</code></td><td><code>UserSettings</code></td><td>required</td><td>—</td></tr>
+<tr><td>2</td><td><code>revision</code></td><td><code>string</code></td><td>required</td><td>—</td></tr>
+</tbody></table></div>
+<h3 id="struct-UserReplaceResult"><code>UserReplaceResult</code></h3>
+<p class="meta">unknown fields <code>refuse</code></p>
+<div class="wrap"><table>
+<thead><tr><th>id</th><th>field</th><th>type</th><th>presence</th><th>named elsewhere</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>outcome</code></td><td><code>UserReplaceOutcome</code></td><td>required</td><td>—</td></tr>
+<tr><td>2</td><td><code>snapshot</code></td><td><code>UserSnapshot</code></td><td>required</td><td>—</td></tr>
+</tbody></table></div>
+<h3 id="struct-ConfigObservation"><code>ConfigObservation</code></h3>
+<p class="meta">unknown fields <code>refuse</code></p>
+<div class="wrap"><table>
+<thead><tr><th>id</th><th>field</th><th>type</th><th>presence</th><th>named elsewhere</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>outcome</code></td><td><code>ConfigObservationOutcome</code></td><td>required</td><td>—</td></tr>
+<tr><td>2</td><td><code>cursor</code></td><td><code>string</code></td><td>required</td><td>—</td></tr>
+<tr><td>3</td><td><code>snapshot</code></td><td><code>Snapshot</code></td><td>optional · omitted when absent</td><td>—</td></tr>
+</tbody></table></div>
+<h2 id="enums">Enumerations <span class="tag">[DEF-T5]</span></h2>
+<p>Enum fields carry JSON strings containing exact member names, never numeric IDs. Unknown names are preserved with grant and refused as bad_enum with refuse on read and write. Optional absent fields preserve presence separately from an empty string.</p>
+<p class="meta">An enumeration is a closed vocabulary of wire names, and each one says on its own what a reader does with a member it has never heard of <span class="tag">[DEF-A5]</span>.</p>
+<h3 id="enum-UserReplaceOutcome"><code>UserReplaceOutcome</code></h3>
+<p class="meta">a member this reader does not know is <code>refuse</code></p>
+<div class="wrap"><table>
+<thead><tr><th>id</th><th>member</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>applied</code></td></tr>
+<tr><td>2</td><td><code>conflict</code></td></tr>
+</tbody></table></div>
+<h3 id="enum-ConfigObservationOutcome"><code>ConfigObservationOutcome</code></h3>
+<p class="meta">a member this reader does not know is <code>refuse</code></p>
+<div class="wrap"><table>
+<thead><tr><th>id</th><th>member</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>snapshot</code></td></tr>
+<tr><td>2</td><td><code>unchanged</code></td></tr>
+<tr><td>3</td><td><code>gap</code></td></tr>
+<tr><td>4</td><td><code>unavailable</code></td></tr>
+<tr><td>5</td><td><code>unsupported</code></td></tr>
+<tr><td>6</td><td><code>invalid</code></td></tr>
+</tbody></table></div>
 <h2 id="refusals">Refusal words <span class="tag">[DEF-R1]</span></h2>
 <div class="wrap"><table>
 <thead><tr><th>order</th><th>word</th><th>stage</th></tr></thead>
@@ -90,16 +149,44 @@
 <tr><td>6</td><td><code>duplicate_field</code></td><td><code>structure</code></td></tr>
 <tr><td>7</td><td><code>unknown_field</code></td><td><code>structure</code></td></tr>
 <tr><td>8</td><td><code>missing_field</code></td><td><code>structure</code></td></tr>
-<tr><td>9</td><td><code>trailing_bytes</code></td><td><code>document</code></td></tr>
+<tr><td>9</td><td><code>bad_enum</code></td><td><code>structure</code></td></tr>
+<tr><td>10</td><td><code>trailing_bytes</code></td><td><code>document</code></td></tr>
 </tbody></table></div>
 <h2 id="service-ConfigReader">Service <code>ConfigReader</code> <span class="tag">[DEF-S1]</span></h2>
 <p>Per-user configuration read service. Caller identity is checked independently of overrides.</p>
 <p>Wire identity: <code>abstraction.config/reader@1</code></p>
+<p>Multiple services share this namespace. Generated ServiceName (Go) and service_name (C++/Python) validate the request envelope and version before returning its service identity for routing. The selected generated dispatcher validates the method and typed arguments; the selector does not authorize callers or interpret method payloads.</p>
 <p>Frames carry version, service, method and typed arguments. Transport owns framing, associated exchanges, deadlines and connections. Unknown version/service/method and malformed arguments are rejected before invoking a handler. One-way WriteFrame success means local submission, not remote acceptance or persistence.</p>
 <p>Request-response methods use ExchangeFrame. Replies carry version, service, method, ok and payload; success payload contains typed value (or an empty object for void). Error payload contains nonempty code and message, which may be empty. ServiceError preserves unknown codes. Unexpected handler failures become handler_error without private details; invalid results become invalid_result. Clients validate reply identity and result before exposing it. A malformed frame or transport failure remains a local error; the transport must associate each response with its exchange. C++ dispatchers are pure protocol bindings, not listening servers.</p>
 <p>Read same-user machine/user configuration with explicit caller run overrides. No writes, watch or provider fallback.</p>
 <h3><code>Read</code></h3><p><code>request-response</code> <code>Snapshot</code></p><ul>
 <li>Argument 1: <code>RunOverrides</code> <code>overrides</code> (required, including zero/false/empty)</li>
+</ul>
+<h2 id="service-ConfigEditor">Service <code>ConfigEditor</code> <span class="tag">[DEF-S1]</span></h2>
+<p>Same-account Program-proven user editor on the config endpoint. The service selects its private user path once. Caller claims cannot grant authority; forbidden callers cause no storage access. Existing machine and run rungs are unaffected.</p>
+<p>Wire identity: <code>abstraction.config/editor@1</code></p>
+<p>Multiple services share this namespace. Generated ServiceName (Go) and service_name (C++/Python) validate the request envelope and version before returning its service identity for routing. The selected generated dispatcher validates the method and typed arguments; the selector does not authorize callers or interpret method payloads.</p>
+<p>Frames carry version, service, method and typed arguments. Transport owns framing, associated exchanges, deadlines and connections. Unknown version/service/method and malformed arguments are rejected before invoking a handler. One-way WriteFrame success means local submission, not remote acceptance or persistence.</p>
+<p>Request-response methods use ExchangeFrame. Replies carry version, service, method, ok and payload; success payload contains typed value (or an empty object for void). Error payload contains nonempty code and message, which may be empty. ServiceError preserves unknown codes. Unexpected handler failures become handler_error without private details; invalid results become invalid_result. Clients validate reply identity and result before exposing it. A malformed frame or transport failure remains a local error; the transport must associate each response with its exchange. C++ dispatchers are pure protocol bindings, not listening servers.</p>
+<p>Read only the authenticated service user&#39;s persisted rung. No environment or machine merge. Missing storage is empty; corrupt, unsupported or unavailable storage returns storage_unavailable.</p>
+<h3><code>ReadUser</code></h3><p><code>request-response</code> <code>UserSnapshot</code></p><ul>
+</ul>
+<p>Compare the opaque revision and replace atomically through the selected conditional-write store. Stale revision returns conflict. Empty revision is invalid_revision. Storage failures return storage_unavailable. A canceled wait leaves write outcome unresolved; reread rather than blindly retry.</p>
+<h3><code>ReplaceUser</code></h3><p><code>request-response</code> <code>UserReplaceResult</code></p><ul>
+<li>Argument 1: <code>string</code> <code>expected_revision</code> (required, including zero/false/empty)</li>
+<li>Argument 2: <code>UserSettings</code> <code>values</code> (required, including zero/false/empty)</li>
+</ul>
+<h2 id="service-ConfigObserver">Service <code>ConfigObserver</code> <span class="tag">[DEF-S1]</span></h2>
+<p>Same-account latest-snapshot long-poll observation over a provider&#39;s explicit change notification source.</p>
+<p>Wire identity: <code>abstraction.config/observer@1</code></p>
+<p>Multiple services share this namespace. Generated ServiceName (Go) and service_name (C++/Python) validate the request envelope and version before returning its service identity for routing. The selected generated dispatcher validates the method and typed arguments; the selector does not authorize callers or interpret method payloads.</p>
+<p>Frames carry version, service, method and typed arguments. Transport owns framing, associated exchanges, deadlines and connections. Unknown version/service/method and malformed arguments are rejected before invoking a handler. One-way WriteFrame success means local submission, not remote acceptance or persistence.</p>
+<p>Request-response methods use ExchangeFrame. Replies carry version, service, method, ok and payload; success payload contains typed value (or an empty object for void). Error payload contains nonempty code and message, which may be empty. ServiceError preserves unknown codes. Unexpected handler failures become handler_error without private details; invalid results become invalid_result. Clients validate reply identity and result before exposing it. A malformed frame or transport failure remains a local error; the transport must associate each response with its exchange. C++ dispatchers are pure protocol bindings, not listening servers.</p>
+<p>Empty cursor reads the current snapshot. At the same revision, wait at most wait_ms (0..30000) for provider invalidation; reread on expiry. Cursor is at most 512 UTF-8 bytes and each override at most 4096 bytes. A slow consumer receives the latest revision; revisions include values and provenance. Missing change notification support gives unsupported. Bounded waiter exhaustion or provider notification failure gives unavailable. Caller cancellation stops observation waiting only; setting mutations retain their own lifetimes. Receiving account authority is rechecked before returning data.</p>
+<h3><code>Observe</code></h3><p><code>request-response</code> <code>ConfigObservation</code></p><ul>
+<li>Argument 1: <code>RunOverrides</code> <code>overrides</code> (required, including zero/false/empty)</li>
+<li>Argument 2: <code>string</code> <code>cursor</code> (required, including zero/false/empty)</li>
+<li>Argument 3: <code>i64</code> <code>wait_ms</code> (required, including zero/false/empty)</li>
 </ul>
 
 <footer>
