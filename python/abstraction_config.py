@@ -167,7 +167,7 @@ def _search_paths():
     return out
 
 
-def load():
+def legacy_load():
     """The machine's configuration. Never fails: a machine with nothing set up
     is a machine with no extra tiers, which every caller already handles."""
     c = Config()
@@ -225,17 +225,17 @@ def overridden():
 
 
 def stamp():
-    return load().stamp()
+    return legacy_load().stamp()
 
 
-def job_store():
+def legacy_job_store():
     """Where jobs live on this machine, and what said so.
 
     Configuration first, then the default. An existing ~/.modelget keeps being
     the store, because moving the default on upgrade would strand whatever is
     in flight -- a store is a directory of real work, not a cache.
     """
-    c = load()
+    c = legacy_load()
     if c.store:
         return c.store, str(c.origin("store"))
     home = os.path.expanduser("~")
@@ -355,7 +355,7 @@ class Subscription:
         self._sub.close()
 
 
-def watch(budget=0.0):
+def legacy_watch(budget=0.0):
     """Report the machine's answer whenever it changes.
 
     ``budget`` seconds with nothing changing also reports quiet, so a caller
@@ -369,11 +369,11 @@ def watch(budget=0.0):
         every = ASK_EVERY if budget <= 0 else min(ASK_EVERY, budget)
         return Subscription(abstraction_watch.poll(_look, every, budget),
                             "asking every %gs -- %s" % (every, e))
-    c = load()
+    c = legacy_load()
     sub = abstraction_watch.push(c, c.stamp(), budget)
 
     def reread():
-        now = load()
+        now = legacy_load()
         sub.post(now, now.stamp())
 
     teller = threading.Thread(target=abstraction_watch.settle,
@@ -389,7 +389,7 @@ def watch(budget=0.0):
 
 
 def _look():
-    c = load()
+    c = legacy_load()
     return c, c.stamp()
 
 
@@ -569,10 +569,7 @@ else:
     def _notify_dirs(dirs):
         raise OSError("no directory notification on " + sys.platform)
 
-# Explicit adoption names; old spellings retain compatibility without changing
-# storage selection or migrating files in an application's process.
-legacy_load = load
-legacy_job_store = job_store
-legacy_watch = watch
+# Explicit adoption names for the path helpers above. Applications use
+# Machine.resolve_config() and the resolved job service.
 legacy_user_path = user_path
 legacy_machine_path = machine_path

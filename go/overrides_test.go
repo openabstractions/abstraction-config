@@ -24,7 +24,7 @@ func TestExplicitOverridesDoNotReadHostRun(t *testing.T) {
 	if got.Store != "caller-value" || got.Origin("store").Rung != Environment {
 		t.Fatalf("explicit override missing: %+v", got)
 	}
-	if Load().Store != os.Getenv("ABSTRACTION_STORE") {
+	if LegacyLoad().Store != os.Getenv("ABSTRACTION_STORE") {
 		t.Fatal("legacy local Load behavior changed")
 	}
 }

@@ -67,7 +67,7 @@ func TestExistingFileEditsSurviveReplacementAndDeletion(t *testing.T) {
 	if err := os.Remove(path); err != nil {
 		t.Fatal(err)
 	}
-	expect(Load().Store)
+	expect(LegacyLoad().Store)
 	write(path, "recreated")
 	expect("recreated")
 	write(path, "recreated-edited")
@@ -84,7 +84,7 @@ func TestExistingFileEditsSurviveReplacementAndDeletion(t *testing.T) {
 // than a change.
 func attach(t *testing.T) (*Subscription, <-chan Config) {
 	t.Helper()
-	s := Watch()
+	s := LegacyWatchQuiet(0)
 	t.Cleanup(func() { s.Close() })
 	ch := s.Changes()
 	told(t, s, ch)
@@ -173,10 +173,10 @@ func TestTheSameAnswerWrittenAgainIsNotAChange(t *testing.T) {
 // A subscriber that never reads, and one that has gone, must not stop a writer.
 func TestAWriterIsNotHeldUpByASubscriber(t *testing.T) {
 	path := own(t)
-	idle := Watch()
+	idle := LegacyWatchQuiet(0)
 	defer idle.Close()
 	idle.Changes()
-	gone := Watch()
+	gone := LegacyWatchQuiet(0)
 	gone.Close()
 	for i := range 50 {
 		if err := Edit(path, func(c *Config) error { c.Store = string(rune('a' + i%26)); return nil }); err != nil {
@@ -190,7 +190,7 @@ func TestTheLayerWorksWithNobodySubscribed(t *testing.T) {
 	if err := Save(path, Config{Store: "alone"}); err != nil {
 		t.Fatal(err)
 	}
-	if got := Load().Store; got != "alone" {
+	if got := LegacyLoad().Store; got != "alone" {
 		t.Fatalf("read back %q", got)
 	}
 }
@@ -200,7 +200,7 @@ func TestCurrentIsTheAnswerBeforeAnythingHasChanged(t *testing.T) {
 	if err := Save(path, Config{Store: "already"}); err != nil {
 		t.Fatal(err)
 	}
-	s := Watch()
+	s := LegacyWatchQuiet(0)
 	defer s.Close()
 	if got := s.Current().Store; got != "already" {
 		t.Fatalf("a fresh subscription says %q", got)

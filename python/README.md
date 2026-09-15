@@ -1,10 +1,9 @@
 # Explicit legacy Python configuration provider
 
 This `python/` package retains embedded file access for deliberate local-provider
-adoption. Its old `load`, `job_store` and `watch` names are deprecated application
-entrypoints. Use `legacy_load`, `legacy_job_store`, `legacy_watch` and
-`legacy_user_path` when intentionally selecting this provider. The old names
-retain their behavior; no files are moved or silently reinterpreted.
+adoption. `legacy_load`, `legacy_job_store`, `legacy_watch` and
+`legacy_user_path` select this provider; the unprefixed `load`, `job_store` and
+`watch` names were removed. No files are moved or silently reinterpreted.
 
 Application clients use the generated protocol in `../py` and the resolved
 Python facade. See [the service client](../py/README.md). Existing user/machine
@@ -44,14 +43,14 @@ files and writes none, so running it changes nothing.
 
 | call | what it does |
 |---|---|
-| `job_store()` | `(path, why)` — where jobs live on this machine, and what decided |
-| `load()` | a `Config`: `nas_store`, `store`, `log_sink`, `log_service`, `off`. A file that cannot be read or parsed is skipped, with one line on stderr saying which |
+| `legacy_job_store()` | `(path, why)` — where jobs live on this machine, and what decided |
+| `legacy_load()` | a `Config`: `nas_store`, `store`, `log_sink`, `log_service`, `off`. A file that cannot be read or parsed is skipped, with one line on stderr saying which |
 | `Config.origin(key)` | which authority answered for one key, and which file said so |
 | `Config.describe()` | what was found and where, for a `status` command |
 | `Config.stamp()` | differs whenever the answer differs, so a long-running process can ask whether anything moved instead of rebuilding |
 | `overridden()` | the keys the environment is deciding, whatever the files say |
 | `user_path()` / `machine_path()` | the conventional locations on this platform |
-| `watch(budget)` | a subscription that re-reads when the answer changes |
+| `legacy_watch(budget)` | a subscription that re-reads when the answer changes |
 
 The environment variables that override a file, one per key:
 `ABSTRACTION_NAS_STORE`, `ABSTRACTION_STORE`, `ABSTRACTION_LOG`,

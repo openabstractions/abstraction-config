@@ -18,6 +18,36 @@ reads existing configuration records and owns revision-checked user replacement.
 Applications supply run overrides explicitly and receive values with provenance.
 A provenance path is diagnostic; it does not authorize opening provider files.
 
+`ConfigEditor.ReplaceUser` reports `applied`, `conflict`, `forbidden` or
+`unavailable`. `conflict` returns the current user values; reread and decide
+again. A host with an edit policy returns `forbidden` for an evaluated refusal.
+It returns `unavailable` when no decision could be obtained, and the caller may
+retry. Neither writes storage. The installed runtime asks the rights service for
+`abstraction.config/user.replace` on `abstraction.config/editor@1`. The
+[editor contract](CONTRACT.md) gives the full table.
+
+```go
+editor, err := facade.Discover().ResolveConfigEditor(ctx, facade.Requirements{})
+if err != nil {
+	return err
+}
+current, err := editor.ReadUserContext(ctx)
+if err != nil {
+	return err
+}
+values := current.Values
+values.LogSink = ""
+result, err := editor.ReplaceUserContext(ctx, current.Revision, values)
+switch {
+case err != nil:
+	return err
+case result.Outcome == "conflict":
+	// result.Snapshot holds the values another writer stored.
+case result.Outcome == "unavailable":
+	// No policy decision; nothing was written.
+}
+```
+
 See [Python setup](py/README.md) and [C++ setup](cpp/README.md). Missing or refused
 services stay explicit. Default installed Go/C++/Python bindings retain independent
 server trust. A custom host requires independently configured expectations.
@@ -36,9 +66,27 @@ facade resolves that service; it reads no shared configuration file during
 `Discover()`. The runtime's resolver supplies capability availability separately.
 Configuration values are settings, and grant no authority to perform an operation.
 
-The `Load()` API and file formats below describe the service's provider and
+The `LegacyLoad()` API and file formats below describe the service's provider and
 explicit legacy integrations. Their permissive defaults are provider behavior.
 The service client reports an unavailable service as an error.
+
+The unprefixed Go file-provider entry points were removed:
+
+| removed | applications use | deliberate provider adopters call |
+| --- | --- | --- |
+| Go `Load` | `facade.Discover().ResolveConfig` | `LegacyLoad` |
+| Go `JobStore` | the resolved job service and its receipts | `LegacyJobStore` |
+| Go `Watch`, `WatchQuiet` | a resolved config reader's snapshot observation | `LegacyWatchQuiet` |
+
+The unprefixed Python names are deprecated and keep their behavior:
+
+| deprecated | applications use | deliberate provider adopters call |
+| --- | --- | --- |
+| Python `load`, `watch` | `Machine.resolve_config()` | `legacy_load`, `legacy_watch` |
+| Python `job_store` | the resolved job service and its receipts | `legacy_job_store` |
+
+Python raises `LegacyConfigDeprecationWarning`, a `DeprecationWarning` subclass
+carrying `api`, `replacement` and `adoption`.
 
 ## Words
 
@@ -102,7 +150,7 @@ func main() {
 	os.Setenv(config.Env["log_sink"], logFile)
 
 	// Every application afterwards asks the machine, knowing nothing.
-	c := config.Load()
+	c := config.LegacyLoad()
 	fmt.Println("log sink:", c.LogSink)
 	fmt.Println("from:", c.From)
 
@@ -131,7 +179,7 @@ that service.
 - `LogSink` — a file every tool appends structured log records to.
 - `LogService` — the address of a local socket that receives log records.
 
-`Load() Config` reads the machine file, then the per-user file, then the
+`LegacyLoad() Config` reads the machine file, then the per-user file, then the
 environment, each overriding the last field by field. It returns no error: a
 file that cannot be read or parsed is skipped, with one line on stderr saying
 which. `Config.Describe() string` renders what was found and where, for a
@@ -150,7 +198,7 @@ for this platform. `MachinePath` returns an empty string on Windows when
 `ABSTRACTION_LOG_SERVICE`. `Name` is the constant `"abstraction"`, used as the
 directory and file stem.
 
-`JobStore() (string, error)` answers where jobs live: the configured `Store`, or
+`LegacyJobStore() (string, error)` answers where jobs live: the configured `Store`, or
 an existing `~/.modelget` directory if one is present, or `~/.abstraction`.
 
 ## Today
@@ -166,7 +214,7 @@ Experimental. **Go and Python**, one file each, consumed indirectly by
   which is a poor fit for anything out of tree.
 - Nothing validates the values. A `Store` pointing at a path that does not exist
   is returned unchanged.
-- `Load()` re-reads both files on every call; there is no caching.
+- `LegacyLoad()` re-reads both files on every call; there is no caching.
 
 ## Conformance
 

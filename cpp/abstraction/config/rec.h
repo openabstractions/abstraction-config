@@ -158,12 +158,13 @@ inline void strmap(std::string& out, const std::map<std::string, std::string>& m
     out += '}';
 }
 
-inline const std::vector<std::string> kUserReplaceOutcomeNames = {"applied", "conflict"};
+inline const std::vector<std::string> kUserReplaceOutcomeNames = {"applied", "conflict", "forbidden", "unavailable"};
 inline const std::string kUserReplaceOutcomeUnknown = "refuse";
 
 inline const std::vector<std::string> kConfigObservationOutcomeNames = {"snapshot", "unchanged", "gap", "unavailable", "unsupported", "invalid"};
 inline const std::string kConfigObservationOutcomeUnknown = "refuse";
 
+// Existing per-run overrides. Empty strings do not override file values.
 struct RunOverrides {
     std::string nas_store;
     std::string store;
@@ -171,11 +172,14 @@ struct RunOverrides {
     std::string log_service;
 };
 
+// Per-key provenance: machine/user file path, or environment/default with empty
+// path.
 struct Origin {
     std::string rung;
     std::string path;
 };
 
+// Provenance for every configuration key, including default answers.
 struct Origins {
     Origin nas_store;
     Origin store;
@@ -184,6 +188,9 @@ struct Origins {
     Origin off;
 };
 
+// Existing provider values and provenance. Empty values mean absence. Stamp
+// follows values rather than provenance; paths are diagnostic configuration
+// data, not permission to access a store.
 struct Snapshot {
     std::string nas_store;
     std::string store;
@@ -194,6 +201,10 @@ struct Snapshot {
     std::string stamp;
 };
 
+// User-rung overrides only. Empty values clear overrides; machine and run
+// values never enter this record. The configuration backing-file path is
+// selected by the service; path-valued settings grant no provider storage
+// authority.
 struct UserSettings {
     std::string nas_store;
     std::string store;
@@ -202,16 +213,31 @@ struct UserSettings {
     std::map<std::string, std::string> off;
 };
 
+// Normalized user-rung content and an opaque content revision. A missing file
+// yields empty values; unreadable or unsupported storage is refused. Revision
+// may recur when identical content is restored.
 struct UserSnapshot {
     UserSettings values;
     std::string revision;
 };
 
+// Applied returns the written snapshot. Conflict performs no write and returns
+// the current snapshot. Forbidden reports an evaluated edit-policy refusal;
+// unavailable reports that the edit-policy decision could not be obtained and
+// may be retried. Both perform no storage access and carry empty values with an
+// empty revision. No outcome merges settings implicitly.
 struct UserReplaceResult {
     std::string outcome;
     UserSnapshot snapshot;
 };
 
+// Latest effective configuration, with an opaque cursor bound to provider
+// instance and explicit run overrides. snapshot carries a snapshot and new
+// cursor; unchanged carries the original cursor and no snapshot. Other outcomes
+// carry no snapshot and preserve the supplied cursor. Intermediate revisions
+// may be coalesced; this is not an event history. A restarted provider or
+// changed override binding gives gap and requires an explicit empty-cursor
+// restart.
 struct ConfigObservation {
     std::string outcome;
     std::string cursor;
@@ -459,7 +485,7 @@ inline void enc_usersnapshot(std::string& out, const UserSnapshot& v, int depth)
 }
 
 inline void enc_userreplaceresult(std::string& out, const UserReplaceResult& v, int depth) {
-    if (v.outcome != "applied" && v.outcome != "conflict") { throw Refusal("bad_enum",0); }
+    if (v.outcome != "applied" && v.outcome != "conflict" && v.outcome != "forbidden" && v.outcome != "unavailable") { throw Refusal("bad_enum",0); }
     out += '{';
     out += '\n';
     pad(out, depth + 1);
@@ -1365,7 +1391,7 @@ inline UserReplaceResult decode_userreplaceresult(Reader& r) {
     ++r.pos;
     --r.depth;
     if ((seen & 3u) != 3u) r.refuse("missing_field");
-    if (v.outcome != "applied" && v.outcome != "conflict") { r.refuse("bad_enum"); }
+    if (v.outcome != "applied" && v.outcome != "conflict" && v.outcome != "forbidden" && v.outcome != "unavailable") { r.refuse("bad_enum"); }
     return v;
 }
 

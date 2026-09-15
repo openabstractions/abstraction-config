@@ -129,7 +129,7 @@ export function strmap(out, m, depth) {
   out.byte(0x7d);
 }
 
-export const UserReplaceOutcomeNames = ["applied", "conflict"];
+export const UserReplaceOutcomeNames = ["applied", "conflict", "forbidden", "unavailable"];
 export const UserReplaceOutcomeUnknown = "refuse";
 
 export const ConfigObservationOutcomeNames = ["snapshot", "unchanged", "gap", "unavailable", "unsupported", "invalid"];
@@ -323,7 +323,7 @@ export function enc_usersnapshot(out, v, depth) {
 
 export function enc_userreplaceresult(out, v, depth) {
     if (typeof v.outcome !== "string") throw new Refusal("wrong_type",0);
-    if (v.outcome !== "applied" && v.outcome !== "conflict") { throw new Refusal("bad_enum",0); }
+    if (v.outcome !== "applied" && v.outcome !== "conflict" && v.outcome !== "forbidden" && v.outcome !== "unavailable") { throw new Refusal("bad_enum",0); }
   out.byte(0x7b);
   out.byte(0x0a);
   pad(out, depth + 1);
@@ -867,34 +867,60 @@ function strMap(r) {
   return out;
 }
 
+// Existing per-run overrides. Empty strings do not override file values.
 export function newRunOverrides() {
   return { nas_store: "", store: "", log_sink: "", log_service: "" };
 }
 
+// Per-key provenance: machine/user file path, or environment/default with empty
+// path.
 export function newOrigin() {
   return { rung: "", path: "" };
 }
 
+// Provenance for every configuration key, including default answers.
 export function newOrigins() {
   return { nas_store: newOrigin(), store: newOrigin(), log_sink: newOrigin(), log_service: newOrigin(), off: newOrigin() };
 }
 
+// Existing provider values and provenance. Empty values mean absence. Stamp
+// follows values rather than provenance; paths are diagnostic configuration
+// data, not permission to access a store.
 export function newSnapshot() {
   return { nas_store: "", store: "", log_sink: "", log_service: "", off: {}, origins: newOrigins(), stamp: "" };
 }
 
+// User-rung overrides only. Empty values clear overrides; machine and run
+// values never enter this record. The configuration backing-file path is
+// selected by the service; path-valued settings grant no provider storage
+// authority.
 export function newUserSettings() {
   return { nas_store: "", store: "", log_sink: "", log_service: "", off: {} };
 }
 
+// Normalized user-rung content and an opaque content revision. A missing file
+// yields empty values; unreadable or unsupported storage is refused. Revision
+// may recur when identical content is restored.
 export function newUserSnapshot() {
   return { values: newUserSettings(), revision: "" };
 }
 
+// Applied returns the written snapshot. Conflict performs no write and returns
+// the current snapshot. Forbidden reports an evaluated edit-policy refusal;
+// unavailable reports that the edit-policy decision could not be obtained and
+// may be retried. Both perform no storage access and carry empty values with an
+// empty revision. No outcome merges settings implicitly.
 export function newUserReplaceResult() {
   return { outcome: "", snapshot: newUserSnapshot() };
 }
 
+// Latest effective configuration, with an opaque cursor bound to provider
+// instance and explicit run overrides. snapshot carries a snapshot and new
+// cursor; unchanged carries the original cursor and no snapshot. Other outcomes
+// carry no snapshot and preserve the supplied cursor. Intermediate revisions
+// may be coalesced; this is not an event history. A restarted provider or
+// changed override binding gives gap and requires an explicit empty-cursor
+// restart.
 export function newConfigObservation() {
   return { outcome: "", cursor: "", snapshot: null };
 }
@@ -1265,7 +1291,7 @@ function decode_userreplaceresult(r) {
   r.pos++;
   r.depth--;
   if (((seen & 3) >>> 0) !== 3) throw r.refuse("missing_field");
-    if (v.outcome !== "applied" && v.outcome !== "conflict") { throw r.refuse("bad_enum"); }
+    if (v.outcome !== "applied" && v.outcome !== "conflict" && v.outcome !== "forbidden" && v.outcome !== "unavailable") { throw r.refuse("bad_enum"); }
   return v;
 }
 

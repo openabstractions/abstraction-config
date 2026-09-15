@@ -207,11 +207,15 @@ func strmap(out []byte, m map[string]string, depth int) []byte {
 	return append(out, '}')
 }
 
-var UserReplaceOutcomeNames = []string{"applied", "conflict"}
+var UserReplaceOutcomeNames = []string{"applied", "conflict", "forbidden", "unavailable"}
 
 const UserReplaceOutcomeApplied = "applied"
 
 const UserReplaceOutcomeConflict = "conflict"
+
+const UserReplaceOutcomeForbidden = "forbidden"
+
+const UserReplaceOutcomeUnavailable = "unavailable"
 
 const UserReplaceOutcomeUnknown = "refuse"
 
@@ -231,6 +235,7 @@ const ConfigObservationOutcomeInvalid = "invalid"
 
 const ConfigObservationOutcomeUnknown = "refuse"
 
+// Existing per-run overrides. Empty strings do not override file values.
 type RunOverrides struct {
 	NasStore   string
 	Store      string
@@ -238,11 +243,14 @@ type RunOverrides struct {
 	LogService string
 }
 
+// Per-key provenance: machine/user file path, or environment/default with empty
+// path.
 type Origin struct {
 	Rung string
 	Path string
 }
 
+// Provenance for every configuration key, including default answers.
 type Origins struct {
 	NasStore   Origin
 	Store      Origin
@@ -251,6 +259,9 @@ type Origins struct {
 	Off        Origin
 }
 
+// Existing provider values and provenance. Empty values mean absence. Stamp
+// follows values rather than provenance; paths are diagnostic configuration
+// data, not permission to access a store.
 type Snapshot struct {
 	NasStore   string
 	Store      string
@@ -261,6 +272,10 @@ type Snapshot struct {
 	Stamp      string
 }
 
+// User-rung overrides only. Empty values clear overrides; machine and run
+// values never enter this record. The configuration backing-file path is
+// selected by the service; path-valued settings grant no provider storage
+// authority.
 type UserSettings struct {
 	NasStore   string
 	Store      string
@@ -269,16 +284,31 @@ type UserSettings struct {
 	Off        map[string]string
 }
 
+// Normalized user-rung content and an opaque content revision. A missing file
+// yields empty values; unreadable or unsupported storage is refused. Revision
+// may recur when identical content is restored.
 type UserSnapshot struct {
 	Values   UserSettings
 	Revision string
 }
 
+// Applied returns the written snapshot. Conflict performs no write and returns
+// the current snapshot. Forbidden reports an evaluated edit-policy refusal;
+// unavailable reports that the edit-policy decision could not be obtained and
+// may be retried. Both perform no storage access and carry empty values with an
+// empty revision. No outcome merges settings implicitly.
 type UserReplaceResult struct {
 	Outcome  string
 	Snapshot UserSnapshot
 }
 
+// Latest effective configuration, with an opaque cursor bound to provider
+// instance and explicit run overrides. snapshot carries a snapshot and new
+// cursor; unchanged carries the original cursor and no snapshot. Other outcomes
+// carry no snapshot and preserve the supplied cursor. Intermediate revisions
+// may be coalesced; this is not an event history. A restarted provider or
+// changed override binding gives gap and requires an explicit empty-cursor
+// restart.
 type ConfigObservation struct {
 	Outcome  string
 	Cursor   string
@@ -526,7 +556,7 @@ func encUserSnapshot(out []byte, v *UserSnapshot, depth int) []byte {
 }
 
 func encUserReplaceResult(out []byte, v *UserReplaceResult, depth int) []byte {
-	if v.Outcome != "applied" && v.Outcome != "conflict" {
+	if v.Outcome != "applied" && v.Outcome != "conflict" && v.Outcome != "forbidden" && v.Outcome != "unavailable" {
 		panic(&Refusal{Word: "bad_enum", Offset: 0})
 	}
 	out = append(out, '{')
@@ -1901,7 +1931,7 @@ func (r *reader) decodeUserReplaceResult() (*UserReplaceResult, error) {
 	if seen&3 != 3 {
 		return nil, r.refuse("missing_field")
 	}
-	if v.Outcome != "applied" && v.Outcome != "conflict" {
+	if v.Outcome != "applied" && v.Outcome != "conflict" && v.Outcome != "forbidden" && v.Outcome != "unavailable" {
 		return nil, r.refuse("bad_enum")
 	}
 	return v, nil
@@ -2072,17 +2102,8 @@ func (r *reader) decodeOAConfigEditorReadUserArguments() (*OAConfigEditorReadUse
 			if r.at() != ':' {
 				return nil, r.refuse("malformed")
 			}
-			r.pos++
-			r.ws()
-			switch key {
-			default:
-				return nil, r.refuse("unknown_field")
-			}
-			r.ws()
-			if r.at() != ',' {
-				break
-			}
-			r.pos++
+			_ = key
+			return nil, r.refuse("unknown_field")
 		}
 	}
 	if r.at() != '}' {

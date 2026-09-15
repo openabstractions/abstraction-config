@@ -7,7 +7,7 @@ and a citation that resolves to no rule here is a defect in one of the two.
 [README.md](README.md) is the door — what this layer is, how to obtain it, one
 example that runs. No rule on that page carries a tag.
 
-An application calls `Load()` and is told what tiers this machine has. It is
+A caller of the file provider calls `LegacyLoad()` and is told what tiers this machine has. It is
 never told how to find them, and it is never separately configured: there is one
 configuration step per machine, performed by whoever installs a tier, and zero
 per application.
@@ -238,10 +238,11 @@ same-account Program-proven caller before accessing user storage.
 | Clearing | Empty strings and an empty map remove user overrides. Lower rungs remain unchanged. |
 | Revision | Equal normalized content has equal revision, including after restoring earlier values. It is a content comparison token, not an operation identity or monotonic sequence. |
 | Refusal | `invalid_revision` rejects an empty expected revision; `storage_unavailable` preserves failed storage. Identity errors preserve the reader's `caller_unavailable`, `identity_required` and `wrong_user` codes. |
+| Edit policy | A host may configure `EnableEditPolicy` before Serve. ReplaceUser then evaluates it for the rechecked peer after same-account proof and before storage access. An evaluated refusal returns `forbidden`; a callback wrapping `ErrEditPolicyUnavailable` or a cancelled call returns `unavailable`, which a caller may retry. Both carry empty values and an empty revision and leave storage untouched. The runtime's `ConfigEditPolicyFromRights` asks the rights service for `abstraction.config/user.replace` on `abstraction.config/editor@1`. ReadUser keeps same-account access. Clients generated before these outcomes refuse to decode them. |
 | Waiting | Expired/canceled waiting never grants a write retry. Reread and reconcile an uncertain replacement before deciding a new edit. |
 
 The editor refuses unknown persisted fields rather than dropping them during
-replacement. This strict editor boundary does not change legacy `Load` behavior.
+replacement. This strict editor boundary does not change `LegacyLoad` behavior.
 Generated clients provide the wire interface; the Python artifact is vocabulary
 and transport injection, without a separately implemented Python config host.
 

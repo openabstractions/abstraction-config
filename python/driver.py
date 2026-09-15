@@ -12,6 +12,7 @@ import contextlib
 import io
 import os
 import sys
+import warnings
 
 for _sibling in ("cas", "watch"):
     sys.path.insert(0, os.path.join(
@@ -112,7 +113,7 @@ class Driver:
         return "ok"
 
     def load(self):
-        c = self.hearing(config.load)
+        c = self.hearing(config.legacy_load)
         out = []
         for key in config.KEYS:
             o = c.origin(key)
@@ -124,11 +125,11 @@ class Driver:
     def key(self, name):
         if not name:
             return "invalid"
-        c = self.hearing(config.load)
+        c = self.hearing(config.legacy_load)
         return "ok value=%s from=%s" % (value(c, name), c.origin(name).rung)
 
     def stamp(self):
-        c = self.hearing(config.load)
+        c = self.hearing(config.legacy_load)
         s = c.stamp()
         was, first = self.last, self.first
         self.last, self.first = s, False
@@ -150,8 +151,11 @@ class Driver:
         the text itself ever reaching a transcript two languages must agree
         on."""
         heard = io.StringIO()
-        with contextlib.redirect_stderr(heard):
+        with contextlib.redirect_stderr(heard), warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
             c = f()
+        for w in caught:
+            heard.write(warnings.formatwarning(w.message, w.category, w.filename, w.lineno))
         self.noise += heard.getvalue()
         return c
 

@@ -70,7 +70,7 @@ func TestOneVariableDoesNotMakeEveryKeyComeFromTheEnvironment(t *testing.T) {
 	}
 	t.Setenv(EnvVars["store"], "B")
 
-	c := Load()
+	c := LegacyLoad()
 	if c.Store != "B" || c.Origin("store") != (Origin{Rung: Environment}) {
 		t.Fatalf("store is %q from %v", c.Store, c.Origin("store"))
 	}

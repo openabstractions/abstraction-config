@@ -8,6 +8,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -51,6 +52,10 @@ type driver struct {
 	first bool
 }
 
+func newDriver(w io.Writer) *driver {
+	return &driver{out: bufio.NewWriter(w), noise: &bytes.Buffer{}, first: true}
+}
+
 func run(workdir, scenario string) error {
 	b, err := os.ReadFile(scenario)
 	if err != nil {
@@ -59,7 +64,7 @@ func run(workdir, scenario string) error {
 	if err := settle(workdir); err != nil {
 		return err
 	}
-	d := &driver{out: bufio.NewWriter(os.Stdout), noise: &bytes.Buffer{}, first: true}
+	d := newDriver(os.Stdout)
 	defer d.out.Flush()
 	n := 0
 	for _, line := range strings.Split(strings.ReplaceAll(string(b), "\r\n", "\n"), "\n") {
@@ -178,7 +183,7 @@ func (d *driver) env(rest string) string {
 }
 
 func (d *driver) load() string {
-	c := d.hearing(config.Load)
+	c := d.hearing(config.LegacyLoad)
 	var out []string
 	for _, key := range config.Keys {
 		o := c.Origin(key)
@@ -197,12 +202,12 @@ func (d *driver) key(name string) string {
 	if name == "" {
 		return "invalid"
 	}
-	c := d.hearing(config.Load)
+	c := d.hearing(config.LegacyLoad)
 	return "ok value=" + value(c, name) + " from=" + c.Origin(name).Rung
 }
 
 func (d *driver) stamp() string {
-	c := d.hearing(config.Load)
+	c := d.hearing(config.LegacyLoad)
 	s := c.Stamp()
 	was, first := d.last, d.first
 	d.last, d.first = s, false

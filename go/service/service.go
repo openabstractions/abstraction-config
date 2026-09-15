@@ -23,6 +23,7 @@ type Host struct {
 	load        func(map[string]string) config.Config
 	userPath    string
 	userStore   casapi.Store
+	editPolicy  EditPolicy
 	ctx         context.Context
 	cancel      context.CancelFunc
 	closeOnce   sync.Once
@@ -118,7 +119,7 @@ func (h *Host) Serve(ctx context.Context) error {
 				var reply []byte
 				var service string
 				service, err = wire.ServiceName(call.Frame)
-				receiver := &receiver{host: h, call: call}
+				receiver := &receiver{host: h, call: call, ctx: requestContext}
 				if err == nil {
 					if service == "abstraction.config/editor@1" {
 						dispatcher := wire.ConfigEditorDispatcher{Handler: receiver}
@@ -145,6 +146,7 @@ func (h *Host) Serve(ctx context.Context) error {
 type receiver struct {
 	host *Host
 	call *listen.FramedCall
+	ctx  context.Context
 }
 
 func (r *receiver) Read(overrides wire.RunOverrides) (wire.Snapshot, error) {

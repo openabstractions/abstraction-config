@@ -3,8 +3,8 @@
 // Applications resolve ConfigReader or ConfigEditor through the facade; provider
 // paths are diagnostic provenance and are not application storage instructions.
 //
-// Legacy Load and JobStore remain source-compatible for deliberate embedded
-// provider adoption. Their file discovery is deprecated for application clients.
+// LegacyLoad, LegacyJobStore and LegacyWatchQuiet name the embedded file provider
+// for the services and legacy providers that own it.
 package config
 
 import (
@@ -136,12 +136,11 @@ var EnvVars = map[string]string{
 	"log_service": "ABSTRACTION_LOG_SERVICE",
 }
 
-// Load returns the machine's configuration. It never fails: a machine with
-// nothing set up is a machine with no extra tiers, which every caller already
-// has to handle.
-// Deprecated: application clients use facade.Discover().ResolveConfig.
-// This retained helper explicitly selects the embedded file provider.
-func Load() Config { return load(os.Getenv) }
+// LegacyLoad returns the machine's configuration from the embedded file
+// provider. It never fails: a machine with nothing set up is a machine with no
+// extra tiers, which every caller already has to handle. Application clients use
+// facade.Discover().ResolveConfig.
+func LegacyLoad() Config { return load(os.Getenv) }
 
 // LoadWithOverrides reads the existing file providers, then applies only the
 // supplied run overrides keyed by existing environment variable names. It never
@@ -464,7 +463,9 @@ func sorted(m map[string]string) []string {
 	return out
 }
 
-// JobStore is where jobs live on this machine.
+// LegacyJobStore is where the legacy file job store lives on this machine, for
+// the providers that own it. Application clients resolve the job service and
+// retain receipts.
 //
 // Configuration first, then the default. An existing ~/.modelget keeps being
 // the store, because moving the default on upgrade would strand whatever is in
@@ -484,10 +485,8 @@ func sorted(m map[string]string) []string {
 // Resolving "what has this machine been told" is exactly this package's job,
 // and it already answers the same shape of question in UserPath and
 // MachinePath.
-// Deprecated: application clients resolve the job service and retain receipts.
-// This helper supplies storage only to explicitly selected legacy providers.
-func JobStore() (string, error) {
-	if v := Load().Store; v != "" {
+func LegacyJobStore() (string, error) {
+	if v := LegacyLoad().Store; v != "" {
 		return v, nil
 	}
 	home, err := os.UserHomeDir()

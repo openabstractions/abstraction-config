@@ -1,6 +1,17 @@
 {
   "name": "@openabstractions/config",
   "version": "0.0.0",
+  "description": "Generated JavaScript clients and codecs for configuration reading, user editing and observation.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/openabstractions/abstraction-config.git",
+    "directory": "javascript"
+  },
+  "homepage": "https://github.com/openabstractions/abstraction-config#readme",
+  "bugs": {
+    "url": "https://github.com/openabstractions/abstraction-config/issues"
+  },
   "type": "module",
   "exports": "./js/abstraction/config/rec.mjs",
   "files": [

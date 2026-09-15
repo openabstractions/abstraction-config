@@ -124,6 +124,8 @@
 <tbody>
 <tr><td>1</td><td><code>applied</code></td></tr>
 <tr><td>2</td><td><code>conflict</code></td></tr>
+<tr><td>3</td><td><code>forbidden</code></td></tr>
+<tr><td>4</td><td><code>unavailable</code></td></tr>
 </tbody></table></div>
 <h3 id="enum-ConfigObservationOutcome"><code>ConfigObservationOutcome</code></h3>
 <p class="meta">a member this reader does not know is <code>refuse</code></p>
@@ -171,7 +173,7 @@
 <p>Read only the authenticated service user&#39;s persisted rung. No environment or machine merge. Missing storage is empty; corrupt, unsupported or unavailable storage returns storage_unavailable.</p>
 <h3><code>ReadUser</code></h3><p><code>request-response</code> <code>UserSnapshot</code></p><ul>
 </ul>
-<p>Compare the opaque revision and replace atomically through the selected conditional-write store. Stale revision returns conflict. Empty revision is invalid_revision. Storage failures return storage_unavailable. A canceled wait leaves write outcome unresolved; reread rather than blindly retry.</p>
+<p>Compare the opaque revision and replace atomically through the selected conditional-write store. Stale revision returns conflict. Empty revision is invalid_revision. Storage failures return storage_unavailable. A configured edit policy is evaluated after same-account proof and before storage access: refusal returns forbidden and a failed decision returns unavailable. A canceled wait leaves write outcome unresolved; reread rather than blindly retry.</p>
 <h3><code>ReplaceUser</code></h3><p><code>request-response</code> <code>UserReplaceResult</code></p><ul>
 <li>Argument 1: <code>string</code> <code>expected_revision</code> (required, including zero/false/empty)</li>
 <li>Argument 2: <code>UserSettings</code> <code>values</code> (required, including zero/false/empty)</li>

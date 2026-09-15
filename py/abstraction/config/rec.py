@@ -131,7 +131,7 @@ def strmap(out, m, depth):
     out += b"}"
 
 
-USERREPLACEOUTCOME_NAMES = ["applied", "conflict"]
+USERREPLACEOUTCOME_NAMES = ["applied", "conflict", "forbidden", "unavailable"]
 USERREPLACEOUTCOME_UNKNOWN = "refuse"
 
 
@@ -139,6 +139,7 @@ CONFIGOBSERVATIONOUTCOME_NAMES = ["snapshot", "unchanged", "gap", "unavailable",
 CONFIGOBSERVATIONOUTCOME_UNKNOWN = "refuse"
 
 
+# Existing per-run overrides. Empty strings do not override file values.
 class RunOverrides:
     def __init__(self, **kw):
         self.nas_store = kw.get("nas_store", "")
@@ -147,12 +148,15 @@ class RunOverrides:
         self.log_service = kw.get("log_service", "")
 
 
+# Per-key provenance: machine/user file path, or environment/default with empty
+# path.
 class Origin:
     def __init__(self, **kw):
         self.rung = kw.get("rung", "")
         self.path = kw.get("path", "")
 
 
+# Provenance for every configuration key, including default answers.
 class Origins:
     def __init__(self, **kw):
         self.nas_store = kw.get("nas_store", Origin())
@@ -162,6 +166,9 @@ class Origins:
         self.off = kw.get("off", Origin())
 
 
+# Existing provider values and provenance. Empty values mean absence. Stamp
+# follows values rather than provenance; paths are diagnostic configuration
+# data, not permission to access a store.
 class Snapshot:
     def __init__(self, **kw):
         self.nas_store = kw.get("nas_store", "")
@@ -173,6 +180,9 @@ class Snapshot:
         self.stamp = kw.get("stamp", "")
 
 
+# User-rung overrides only. Empty values clear overrides; machine and run values
+# never enter this record. The configuration backing-file path is selected by
+# the service; path-valued settings grant no provider storage authority.
 class UserSettings:
     def __init__(self, **kw):
         self.nas_store = kw.get("nas_store", "")
@@ -182,18 +192,32 @@ class UserSettings:
         self.off = kw.get("off", {})
 
 
+# Normalized user-rung content and an opaque content revision. A missing file
+# yields empty values; unreadable or unsupported storage is refused. Revision
+# may recur when identical content is restored.
 class UserSnapshot:
     def __init__(self, **kw):
         self.values = kw.get("values", UserSettings())
         self.revision = kw.get("revision", "")
 
 
+# Applied returns the written snapshot. Conflict performs no write and returns
+# the current snapshot. Forbidden reports an evaluated edit-policy refusal;
+# unavailable reports that the edit-policy decision could not be obtained and
+# may be retried. Both perform no storage access and carry empty values with an
+# empty revision. No outcome merges settings implicitly.
 class UserReplaceResult:
     def __init__(self, **kw):
         self.outcome = kw.get("outcome", "")
         self.snapshot = kw.get("snapshot", UserSnapshot())
 
 
+# Latest effective configuration, with an opaque cursor bound to provider
+# instance and explicit run overrides. snapshot carries a snapshot and new
+# cursor; unchanged carries the original cursor and no snapshot. Other outcomes
+# carry no snapshot and preserve the supplied cursor. Intermediate revisions may
+# be coalesced; this is not an event history. A restarted provider or changed
+# override binding gives gap and requires an explicit empty-cursor restart.
 class ConfigObservation:
     def __init__(self, **kw):
         self.outcome = kw.get("outcome", "")
@@ -455,7 +479,7 @@ def enc_usersnapshot(out, v, depth):
 
 def enc_userreplaceresult(out, v, depth):
     if type(v.outcome) is not str: raise Refusal("wrong_type",0)
-    if v.outcome != "applied" and v.outcome != "conflict": raise Refusal("bad_enum",0)
+    if v.outcome != "applied" and v.outcome != "conflict" and v.outcome != "forbidden" and v.outcome != "unavailable": raise Refusal("bad_enum",0)
     out += b"{"
     out += b"\n"
     pad(out, depth + 1)
@@ -1386,7 +1410,7 @@ def _decode_userreplaceresult(r):
     r.depth -= 1
     if seen & 3 != 3:
         raise r.refuse("missing_field")
-    if v.outcome != "applied" and v.outcome != "conflict": raise r.refuse("bad_enum")
+    if v.outcome != "applied" and v.outcome != "conflict" and v.outcome != "forbidden" and v.outcome != "unavailable": raise r.refuse("bad_enum")
     return v
 
 

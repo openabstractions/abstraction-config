@@ -59,14 +59,11 @@ type Subscription struct {
 	end    sync.Once
 }
 
-// Watch reports the machine's answer whenever it changes.
-//
-// Deprecated: this explicitly selected embedded-provider API reads local files.
-// Applications should observe snapshots through a resolved config reader.
-func Watch() *Subscription { return WatchQuiet(0) }
-
-// WatchQuiet also reports quiet once nothing has changed for budget.
-func WatchQuiet(budget time.Duration) *Subscription {
+// LegacyWatchQuiet reports the embedded file provider's answer whenever it
+// changes, and reports quiet once nothing has changed for a positive budget.
+// Zero never reports quiet. Applications observe snapshots through a resolved
+// config reader.
+func LegacyWatchQuiet(budget time.Duration) *Subscription {
 	s := &Subscription{ch: make(chan Config, 1)}
 	watched := watchable()
 	events, stop, err := notifyDirs(watched)
@@ -80,7 +77,7 @@ func WatchQuiet(budget time.Duration) *Subscription {
 		register(s)
 		return s
 	}
-	c := Load()
+	c := LegacyLoad()
 	ctx, cancel := context.WithCancel(context.Background())
 	s.sub, s.stop, s.cancel = watch.Push(c, c.Stamp(), budget), stop, cancel
 	s.how = notifier + " on " + strings.Join(watched, ", ")
@@ -90,12 +87,12 @@ func WatchQuiet(budget time.Duration) *Subscription {
 }
 
 func look() (Config, string, error) {
-	c := Load()
+	c := LegacyLoad()
 	return c, c.Stamp(), nil
 }
 
 func (s *Subscription) reread() {
-	c := Load()
+	c := LegacyLoad()
 	s.sub.Post(c, c.Stamp())
 }
 
@@ -194,7 +191,7 @@ func announce() {
 	if len(subs) == 0 {
 		return
 	}
-	c := Load()
+	c := LegacyLoad()
 	stamp := c.Stamp()
 	for _, s := range subs {
 		s.sub.Post(c, stamp)

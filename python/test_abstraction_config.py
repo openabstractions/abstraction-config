@@ -71,30 +71,30 @@ class Paths(Box):
 
 class Provenance(Box):
     def test_a_key_nothing_set_came_from_the_default(self):
-        c = config.load()
+        c = config.legacy_load()
         self.assertEqual(config.Origin(config.DEFAULT, ""), c.origin("store"))
 
     def test_provenance_names_the_file_that_answered(self):
         user = self.write(config.user_path(), {"store": "A", "log_sink": "L"})
-        c = config.load()
+        c = config.legacy_load()
         self.assertEqual(config.Origin(config.USER, user), c.origin("store"))
         self.assertEqual(config.Origin(config.USER, user), c.origin("log_sink"))
 
     def test_one_variable_does_not_move_every_keys_provenance(self):
         user = self.write(config.user_path(), {"store": "A", "log_sink": "L"})
         self.setenv(config.ENV_VARS["store"], "B")
-        c = config.load()
+        c = config.legacy_load()
         self.assertEqual(("B", config.ENVIRONMENT), (c.store, c.origin("store").rung))
         self.assertEqual(config.Origin(config.USER, user), c.origin("log_sink"))
 
     def test_job_store_says_what_answered(self):
         user = self.write(config.user_path(), {"store": "A"})
-        root, came_from = config.job_store()
+        root, came_from = config.legacy_job_store()
         self.assertEqual("A", root)
         self.assertIn(user, came_from)
 
     def test_job_store_falls_back_to_the_default(self):
-        root, came_from = config.job_store()
+        root, came_from = config.legacy_job_store()
         self.assertTrue(root.endswith(".abstraction"), root)
         self.assertIn("default", came_from)
 
@@ -115,7 +115,7 @@ class Trust(Box):
                           "is privileged and cannot plant anything")
         if sys.platform != "win32":
             return
-        self.assertNotEqual("planted", config.load().store)
+        self.assertNotEqual("planted", config.legacy_load().store)
         self.assertTrue(os.path.exists(planted), "the file was removed rather than ignored")
 
     def test_the_machine_rung_is_where_the_platform_puts_it(self):
@@ -130,7 +130,7 @@ class Trust(Box):
         import io
         heard = io.StringIO()
         with contextlib.redirect_stderr(heard):
-            c = config.load()
+            c = config.legacy_load()
         self.assertEqual("", c.store)
         self.assertIn("ignoring", heard.getvalue())
 
@@ -140,13 +140,13 @@ class Watch(Box):
     time, and it names the mechanism telling it."""
 
     def test_it_names_its_mechanism(self):
-        s = config.watch(BUDGET)
+        s = config.legacy_watch(BUDGET)
         self.addCleanup(s.close)
         self.assertTrue(s.how(), "a subscription that will not say how it is told")
 
     def test_a_write_by_anything_at_all_is_reported(self):
         os.makedirs(os.path.dirname(config.user_path()), exist_ok=True)
-        s = config.watch(BUDGET)
+        s = config.legacy_watch(BUDGET)
         self.addCleanup(s.close)
         s.next(timeout=5)
         done = threading.Event()
@@ -165,7 +165,7 @@ class Watch(Box):
 
     def test_quiet_arrives_when_nothing_moves(self):
         os.makedirs(os.path.dirname(config.user_path()), exist_ok=True)
-        s = config.watch(BUDGET)
+        s = config.legacy_watch(BUDGET)
         self.addCleanup(s.close)
         s.next(timeout=5)
         self.assertTrue(s.next(timeout=5).quiet)

@@ -1,0 +1,10 @@
+[package]
+name = "abstraction-config-api"
+version = "0.0.0"
+edition = "2021"
+description = "Generated OpenAbstractions config Rust service protocol"
+[lib]
+path = "../rs/abstraction/config/rec.rs"
+
+[dependencies]
+abstraction-frame = { path = "../../abstraction-identity/rust-frame" }

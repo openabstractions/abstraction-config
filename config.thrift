@@ -69,14 +69,16 @@ struct UserSnapshot {
 enum UserReplaceOutcome {
   1: applied
   2: conflict
+  3: forbidden
+  4: unavailable
 } (unknown = "refuse")
 struct UserReplaceResult {
   1: required UserReplaceOutcome outcome
   2: required UserSnapshot snapshot
-} (unknown_fields = "refuse", doc="Applied returns the written snapshot. Conflict performs no write and returns the current snapshot. Neither outcome merges settings implicitly.")
+} (unknown_fields = "refuse", doc="Applied returns the written snapshot. Conflict performs no write and returns the current snapshot. Forbidden reports an evaluated edit-policy refusal; unavailable reports that the edit-policy decision could not be obtained and may be retried. Both perform no storage access and carry empty values with an empty revision. No outcome merges settings implicitly.")
 service ConfigEditor {
   UserSnapshot ReadUser() (doc="Read only the authenticated service user's persisted rung. No environment or machine merge. Missing storage is empty; corrupt, unsupported or unavailable storage returns storage_unavailable.")
-  UserReplaceResult ReplaceUser(1: string expected_revision, 2: UserSettings values) (doc="Compare the opaque revision and replace atomically through the selected conditional-write store. Stale revision returns conflict. Empty revision is invalid_revision. Storage failures return storage_unavailable. A canceled wait leaves write outcome unresolved; reread rather than blindly retry.")
+  UserReplaceResult ReplaceUser(1: string expected_revision, 2: UserSettings values) (doc="Compare the opaque revision and replace atomically through the selected conditional-write store. Stale revision returns conflict. Empty revision is invalid_revision. Storage failures return storage_unavailable. A configured edit policy is evaluated after same-account proof and before storage access: refusal returns forbidden and a failed decision returns unavailable. A canceled wait leaves write outcome unresolved; reread rather than blindly retry.")
 } (wire_name = "abstraction.config/editor@1", doc="Same-account Program-proven user editor on the config endpoint. The service selects its private user path once. Caller claims cannot grant authority; forbidden callers cause no storage access. Existing machine and run rungs are unaffected.")
 
 
