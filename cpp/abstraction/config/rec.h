@@ -15,6 +15,192 @@ namespace abstraction::config {
 
 using Raw = std::string;
 
+class Refusal : public std::runtime_error {
+public:
+    Refusal(const char* word, std::size_t offset)
+        : std::runtime_error(std::string("refused: ") + word + " at byte " + std::to_string(offset)),
+          word(word),
+          offset(offset) {}
+    const char* word;
+    std::size_t offset;
+};
+
+enum class UserReplaceOutcome : std::int32_t {
+    Applied = 1,
+    Conflict = 2,
+    Forbidden = 3,
+    Unavailable = 4,
+};
+
+// The member's name on the wire; empty for a value that names no member.
+inline constexpr std::string_view wire_name(UserReplaceOutcome value) {
+    switch (value) {
+        case UserReplaceOutcome::Applied: return "applied";
+        case UserReplaceOutcome::Conflict: return "conflict";
+        case UserReplaceOutcome::Forbidden: return "forbidden";
+        case UserReplaceOutcome::Unavailable: return "unavailable";
+    }
+    return {};
+}
+
+// The member a wire name spells; empty for a name this vocabulary refuses.
+inline std::optional<UserReplaceOutcome> parse_user_replace_outcome(std::string_view name) {
+    if (name == "applied") return UserReplaceOutcome::Applied;
+    if (name == "conflict") return UserReplaceOutcome::Conflict;
+    if (name == "forbidden") return UserReplaceOutcome::Forbidden;
+    if (name == "unavailable") return UserReplaceOutcome::Unavailable;
+    return std::nullopt;
+}
+
+// A member equals its wire name, so code holding the contract's word compares directly.
+inline constexpr bool operator==(UserReplaceOutcome value, std::string_view name) { return wire_name(value) == name; }
+inline constexpr bool operator!=(UserReplaceOutcome value, std::string_view name) { return wire_name(value) != name; }
+inline constexpr bool operator==(std::string_view name, UserReplaceOutcome value) { return wire_name(value) == name; }
+inline constexpr bool operator!=(std::string_view name, UserReplaceOutcome value) { return wire_name(value) != name; }
+
+inline const std::vector<std::string> kUserReplaceOutcomeNames = {"applied", "conflict", "forbidden", "unavailable"};
+
+enum class ConfigObservationOutcome : std::int32_t {
+    Snapshot = 1,
+    Unchanged = 2,
+    Gap = 3,
+    Unavailable = 4,
+    Unsupported = 5,
+    Invalid = 6,
+};
+
+// The member's name on the wire; empty for a value that names no member.
+inline constexpr std::string_view wire_name(ConfigObservationOutcome value) {
+    switch (value) {
+        case ConfigObservationOutcome::Snapshot: return "snapshot";
+        case ConfigObservationOutcome::Unchanged: return "unchanged";
+        case ConfigObservationOutcome::Gap: return "gap";
+        case ConfigObservationOutcome::Unavailable: return "unavailable";
+        case ConfigObservationOutcome::Unsupported: return "unsupported";
+        case ConfigObservationOutcome::Invalid: return "invalid";
+    }
+    return {};
+}
+
+// The member a wire name spells; empty for a name this vocabulary refuses.
+inline std::optional<ConfigObservationOutcome> parse_config_observation_outcome(std::string_view name) {
+    if (name == "snapshot") return ConfigObservationOutcome::Snapshot;
+    if (name == "unchanged") return ConfigObservationOutcome::Unchanged;
+    if (name == "gap") return ConfigObservationOutcome::Gap;
+    if (name == "unavailable") return ConfigObservationOutcome::Unavailable;
+    if (name == "unsupported") return ConfigObservationOutcome::Unsupported;
+    if (name == "invalid") return ConfigObservationOutcome::Invalid;
+    return std::nullopt;
+}
+
+// A member equals its wire name, so code holding the contract's word compares directly.
+inline constexpr bool operator==(ConfigObservationOutcome value, std::string_view name) { return wire_name(value) == name; }
+inline constexpr bool operator!=(ConfigObservationOutcome value, std::string_view name) { return wire_name(value) != name; }
+inline constexpr bool operator==(std::string_view name, ConfigObservationOutcome value) { return wire_name(value) == name; }
+inline constexpr bool operator!=(std::string_view name, ConfigObservationOutcome value) { return wire_name(value) != name; }
+
+inline const std::vector<std::string> kConfigObservationOutcomeNames = {"snapshot", "unchanged", "gap", "unavailable", "unsupported", "invalid"};
+
+inline const std::vector<std::string> kServiceErrorCodeNames = {"handler_error", "invalid_result", "unknown_version", "unknown_service", "unknown_method", "wrong_mode", "storage_unavailable", "caller_unavailable", "identity_required", "wrong_user", "invalid_revision"};
+inline constexpr std::string_view kServiceErrorCodeHandlerError = "handler_error";
+inline constexpr std::string_view kServiceErrorCodeInvalidResult = "invalid_result";
+inline constexpr std::string_view kServiceErrorCodeUnknownVersion = "unknown_version";
+inline constexpr std::string_view kServiceErrorCodeUnknownService = "unknown_service";
+inline constexpr std::string_view kServiceErrorCodeUnknownMethod = "unknown_method";
+inline constexpr std::string_view kServiceErrorCodeWrongMode = "wrong_mode";
+inline constexpr std::string_view kServiceErrorCodeStorageUnavailable = "storage_unavailable";
+inline constexpr std::string_view kServiceErrorCodeCallerUnavailable = "caller_unavailable";
+inline constexpr std::string_view kServiceErrorCodeIdentityRequired = "identity_required";
+inline constexpr std::string_view kServiceErrorCodeWrongUser = "wrong_user";
+inline constexpr std::string_view kServiceErrorCodeInvalidRevision = "invalid_revision";
+
+inline const std::vector<std::string> kReaderErrorCodes = {"storage_unavailable", "caller_unavailable", "identity_required", "wrong_user"};
+
+inline const std::vector<std::string> kEditorErrorCodes = {"invalid_revision", "storage_unavailable", "caller_unavailable", "identity_required", "wrong_user"};
+
+// Existing per-run overrides. Empty strings do not override file values.
+struct RunOverrides {
+    std::string nas_store;
+    std::string store;
+    std::string log_sink;
+    std::string log_service;
+};
+
+// Per-key provenance: machine/user file path, or environment/default with empty
+// path.
+struct Origin {
+    std::string rung;
+    std::string path;
+};
+
+// Provenance for every configuration key, including default answers.
+struct Origins {
+    Origin nas_store;
+    Origin store;
+    Origin log_sink;
+    Origin log_service;
+    Origin off;
+};
+
+// Existing provider values and provenance. Empty values mean absence. Stamp
+// follows values rather than provenance; paths are diagnostic configuration
+// data, not permission to access a store.
+struct Snapshot {
+    std::string nas_store;
+    std::string store;
+    std::string log_sink;
+    std::string log_service;
+    std::map<std::string, std::string> off;
+    Origins origins;
+    std::string stamp;
+};
+
+// User-rung overrides only. Empty values clear overrides; machine and run
+// values never enter this record. The configuration backing-file path is
+// selected by the service; path-valued settings grant no provider storage
+// authority.
+struct UserSettings {
+    std::string nas_store;
+    std::string store;
+    std::string log_sink;
+    std::string log_service;
+    std::map<std::string, std::string> off;
+};
+
+// Normalized user-rung content and an opaque content revision. A missing file
+// yields empty values; unreadable or unsupported storage is refused. Revision
+// may recur when identical content is restored.
+struct UserSnapshot {
+    UserSettings values;
+    std::string revision;
+};
+
+// Applied returns the written snapshot. Conflict performs no write and returns
+// the current snapshot. Forbidden reports an evaluated edit-policy refusal;
+// unavailable reports that the edit-policy decision could not be obtained and
+// may be retried. Both perform no storage access and carry empty values with an
+// empty revision. No outcome merges settings implicitly.
+struct UserReplaceResult {
+    UserReplaceOutcome outcome{};
+    UserSnapshot snapshot;
+};
+
+// Latest effective configuration, with an opaque cursor bound to provider
+// instance and explicit run overrides. snapshot carries a snapshot and new
+// cursor; unchanged carries the original cursor and no snapshot. Other outcomes
+// carry no snapshot and preserve the supplied cursor. Intermediate revisions
+// may be coalesced; this is not an event history. A restarted provider or
+// changed override binding gives gap and requires an explicit empty-cursor
+// restart.
+struct ConfigObservation {
+    ConfigObservationOutcome outcome{};
+    std::string cursor;
+    std::optional<Snapshot> snapshot;
+};
+
+// Codec machinery. Nothing here is API; it may change in any release.
+namespace detail {
+
 inline void esc(std::string& out, const std::string& s);
 
 inline void esc_byte(std::string& out, unsigned char c) {
@@ -56,6 +242,8 @@ inline void strs(std::string& out, const std::vector<std::string>& v, int depth)
     pad(out, depth);
     out += ']';
 }
+
+
 
 inline bool ws(unsigned char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
 
@@ -132,16 +320,6 @@ inline void esc(std::string& out, const std::string& s) {
     out += '"';
 }
 
-class Refusal : public std::runtime_error {
-public:
-    Refusal(const char* word, std::size_t offset)
-        : std::runtime_error(std::string("refused: ") + word + " at byte " + std::to_string(offset)),
-          word(word),
-          offset(offset) {}
-    const char* word;
-    std::size_t offset;
-};
-
 inline void strmap(std::string& out, const std::map<std::string, std::string>& m, int depth) {
     if (m.empty()) { out += "{}"; return; }
     out += "{\n";
@@ -157,92 +335,6 @@ inline void strmap(std::string& out, const std::map<std::string, std::string>& m
     pad(out, depth);
     out += '}';
 }
-
-inline const std::vector<std::string> kUserReplaceOutcomeNames = {"applied", "conflict", "forbidden", "unavailable"};
-inline const std::string kUserReplaceOutcomeUnknown = "refuse";
-
-inline const std::vector<std::string> kConfigObservationOutcomeNames = {"snapshot", "unchanged", "gap", "unavailable", "unsupported", "invalid"};
-inline const std::string kConfigObservationOutcomeUnknown = "refuse";
-
-// Existing per-run overrides. Empty strings do not override file values.
-struct RunOverrides {
-    std::string nas_store;
-    std::string store;
-    std::string log_sink;
-    std::string log_service;
-};
-
-// Per-key provenance: machine/user file path, or environment/default with empty
-// path.
-struct Origin {
-    std::string rung;
-    std::string path;
-};
-
-// Provenance for every configuration key, including default answers.
-struct Origins {
-    Origin nas_store;
-    Origin store;
-    Origin log_sink;
-    Origin log_service;
-    Origin off;
-};
-
-// Existing provider values and provenance. Empty values mean absence. Stamp
-// follows values rather than provenance; paths are diagnostic configuration
-// data, not permission to access a store.
-struct Snapshot {
-    std::string nas_store;
-    std::string store;
-    std::string log_sink;
-    std::string log_service;
-    std::map<std::string, std::string> off;
-    Origins origins;
-    std::string stamp;
-};
-
-// User-rung overrides only. Empty values clear overrides; machine and run
-// values never enter this record. The configuration backing-file path is
-// selected by the service; path-valued settings grant no provider storage
-// authority.
-struct UserSettings {
-    std::string nas_store;
-    std::string store;
-    std::string log_sink;
-    std::string log_service;
-    std::map<std::string, std::string> off;
-};
-
-// Normalized user-rung content and an opaque content revision. A missing file
-// yields empty values; unreadable or unsupported storage is refused. Revision
-// may recur when identical content is restored.
-struct UserSnapshot {
-    UserSettings values;
-    std::string revision;
-};
-
-// Applied returns the written snapshot. Conflict performs no write and returns
-// the current snapshot. Forbidden reports an evaluated edit-policy refusal;
-// unavailable reports that the edit-policy decision could not be obtained and
-// may be retried. Both perform no storage access and carry empty values with an
-// empty revision. No outcome merges settings implicitly.
-struct UserReplaceResult {
-    std::string outcome;
-    UserSnapshot snapshot;
-};
-
-// Latest effective configuration, with an opaque cursor bound to provider
-// instance and explicit run overrides. snapshot carries a snapshot and new
-// cursor; unchanged carries the original cursor and no snapshot. Other outcomes
-// carry no snapshot and preserve the supplied cursor. Intermediate revisions
-// may be coalesced; this is not an event history. A restarted provider or
-// changed override binding gives gap and requires an explicit empty-cursor
-// restart.
-struct ConfigObservation {
-    std::string outcome;
-    std::string cursor;
-    std::optional<Snapshot> snapshot;
-};
 
 struct OAConfigReaderReadArguments {
     RunOverrides overrides;
@@ -297,8 +389,27 @@ struct OAConfigEditorReplaceUserResult {
 struct OAConfigObserverObserveResult {
     ConfigObservation value;
 };
+inline void enc_run_overrides(std::string&, const RunOverrides&, int);
+inline void enc_origin(std::string&, const Origin&, int);
+inline void enc_origins(std::string&, const Origins&, int);
+inline void enc_snapshot(std::string&, const Snapshot&, int);
+inline void enc_user_settings(std::string&, const UserSettings&, int);
+inline void enc_user_snapshot(std::string&, const UserSnapshot&, int);
+inline void enc_user_replace_result(std::string&, const UserReplaceResult&, int);
+inline void enc_config_observation(std::string&, const ConfigObservation&, int);
+inline void enc_oa_config_reader_read_arguments(std::string&, const OAConfigReaderReadArguments&, int);
+inline void enc_oa_config_editor_read_user_arguments(std::string&, const OAConfigEditorReadUserArguments&, int);
+inline void enc_oa_config_editor_replace_user_arguments(std::string&, const OAConfigEditorReplaceUserArguments&, int);
+inline void enc_oa_config_observer_observe_arguments(std::string&, const OAConfigObserverObserveArguments&, int);
+inline void enc_oa_service_frame(std::string&, const OAServiceFrame&, int);
+inline void enc_oa_service_reply(std::string&, const OAServiceReply&, int);
+inline void enc_oa_service_error(std::string&, const OAServiceError&, int);
+inline void enc_oa_config_reader_read_result(std::string&, const OAConfigReaderReadResult&, int);
+inline void enc_oa_config_editor_read_user_result(std::string&, const OAConfigEditorReadUserResult&, int);
+inline void enc_oa_config_editor_replace_user_result(std::string&, const OAConfigEditorReplaceUserResult&, int);
+inline void enc_oa_config_observer_observe_result(std::string&, const OAConfigObserverObserveResult&, int);
 
-inline void enc_runoverrides(std::string& out, const RunOverrides& v, int depth) {
+inline void enc_run_overrides(std::string& out, const RunOverrides& v, int depth) {
     out += '{';
     out += '\n';
     pad(out, depth + 1);
@@ -430,7 +541,7 @@ inline void enc_snapshot(std::string& out, const Snapshot& v, int depth) {
     out += '}';
 }
 
-inline void enc_usersettings(std::string& out, const UserSettings& v, int depth) {
+inline void enc_user_settings(std::string& out, const UserSettings& v, int depth) {
     out += '{';
     out += '\n';
     pad(out, depth + 1);
@@ -466,13 +577,13 @@ inline void enc_usersettings(std::string& out, const UserSettings& v, int depth)
     out += '}';
 }
 
-inline void enc_usersnapshot(std::string& out, const UserSnapshot& v, int depth) {
+inline void enc_user_snapshot(std::string& out, const UserSnapshot& v, int depth) {
     out += '{';
     out += '\n';
     pad(out, depth + 1);
     esc(out, "values");
     out += ": ";
-    enc_usersettings(out, v.values, depth + 1);
+    enc_user_settings(out, v.values, depth + 1);
     out += ',';
     out += '\n';
     pad(out, depth + 1);
@@ -484,33 +595,33 @@ inline void enc_usersnapshot(std::string& out, const UserSnapshot& v, int depth)
     out += '}';
 }
 
-inline void enc_userreplaceresult(std::string& out, const UserReplaceResult& v, int depth) {
-    if (v.outcome != "applied" && v.outcome != "conflict" && v.outcome != "forbidden" && v.outcome != "unavailable") { throw Refusal("bad_enum",0); }
+inline void enc_user_replace_result(std::string& out, const UserReplaceResult& v, int depth) {
+    if (wire_name(v.outcome).empty()) throw Refusal("bad_enum", 0);
     out += '{';
     out += '\n';
     pad(out, depth + 1);
     esc(out, "outcome");
     out += ": ";
-    esc(out, v.outcome);
+    esc(out, std::string(wire_name(v.outcome)));
     out += ',';
     out += '\n';
     pad(out, depth + 1);
     esc(out, "snapshot");
     out += ": ";
-    enc_usersnapshot(out, v.snapshot, depth + 1);
+    enc_user_snapshot(out, v.snapshot, depth + 1);
     out += '\n';
     pad(out, depth);
     out += '}';
 }
 
-inline void enc_configobservation(std::string& out, const ConfigObservation& v, int depth) {
-    if (v.outcome != "snapshot" && v.outcome != "unchanged" && v.outcome != "gap" && v.outcome != "unavailable" && v.outcome != "unsupported" && v.outcome != "invalid") { throw Refusal("bad_enum",0); }
+inline void enc_config_observation(std::string& out, const ConfigObservation& v, int depth) {
+    if (wire_name(v.outcome).empty()) throw Refusal("bad_enum", 0);
     out += '{';
     out += '\n';
     pad(out, depth + 1);
     esc(out, "outcome");
     out += ": ";
-    esc(out, v.outcome);
+    esc(out, std::string(wire_name(v.outcome)));
     out += ',';
     out += '\n';
     pad(out, depth + 1);
@@ -530,24 +641,24 @@ inline void enc_configobservation(std::string& out, const ConfigObservation& v, 
     out += '}';
 }
 
-inline void enc_oaconfigreaderreadarguments(std::string& out, const OAConfigReaderReadArguments& v, int depth) {
+inline void enc_oa_config_reader_read_arguments(std::string& out, const OAConfigReaderReadArguments& v, int depth) {
     out += '{';
     out += '\n';
     pad(out, depth + 1);
     esc(out, "overrides");
     out += ": ";
-    enc_runoverrides(out, v.overrides, depth + 1);
+    enc_run_overrides(out, v.overrides, depth + 1);
     out += '\n';
     pad(out, depth);
     out += '}';
 }
 
-inline void enc_oaconfigeditorreaduserarguments(std::string& out, const OAConfigEditorReadUserArguments& v, int depth) {
+inline void enc_oa_config_editor_read_user_arguments(std::string& out, const OAConfigEditorReadUserArguments& v, int depth) {
     out += '{';
     out += '}';
 }
 
-inline void enc_oaconfigeditorreplaceuserarguments(std::string& out, const OAConfigEditorReplaceUserArguments& v, int depth) {
+inline void enc_oa_config_editor_replace_user_arguments(std::string& out, const OAConfigEditorReplaceUserArguments& v, int depth) {
     out += '{';
     out += '\n';
     pad(out, depth + 1);
@@ -559,19 +670,19 @@ inline void enc_oaconfigeditorreplaceuserarguments(std::string& out, const OACon
     pad(out, depth + 1);
     esc(out, "values");
     out += ": ";
-    enc_usersettings(out, v.values, depth + 1);
+    enc_user_settings(out, v.values, depth + 1);
     out += '\n';
     pad(out, depth);
     out += '}';
 }
 
-inline void enc_oaconfigobserverobservearguments(std::string& out, const OAConfigObserverObserveArguments& v, int depth) {
+inline void enc_oa_config_observer_observe_arguments(std::string& out, const OAConfigObserverObserveArguments& v, int depth) {
     out += '{';
     out += '\n';
     pad(out, depth + 1);
     esc(out, "overrides");
     out += ": ";
-    enc_runoverrides(out, v.overrides, depth + 1);
+    enc_run_overrides(out, v.overrides, depth + 1);
     out += ',';
     out += '\n';
     pad(out, depth + 1);
@@ -589,7 +700,7 @@ inline void enc_oaconfigobserverobservearguments(std::string& out, const OAConfi
     out += '}';
 }
 
-inline void enc_oaserviceframe(std::string& out, const OAServiceFrame& v, int depth) {
+inline void enc_oa_service_frame(std::string& out, const OAServiceFrame& v, int depth) {
     out += '{';
     out += '\n';
     pad(out, depth + 1);
@@ -619,7 +730,7 @@ inline void enc_oaserviceframe(std::string& out, const OAServiceFrame& v, int de
     out += '}';
 }
 
-inline void enc_oaservicereply(std::string& out, const OAServiceReply& v, int depth) {
+inline void enc_oa_service_reply(std::string& out, const OAServiceReply& v, int depth) {
     out += '{';
     out += '\n';
     pad(out, depth + 1);
@@ -655,7 +766,7 @@ inline void enc_oaservicereply(std::string& out, const OAServiceReply& v, int de
     out += '}';
 }
 
-inline void enc_oaserviceerror(std::string& out, const OAServiceError& v, int depth) {
+inline void enc_oa_service_error(std::string& out, const OAServiceError& v, int depth) {
     out += '{';
     out += '\n';
     pad(out, depth + 1);
@@ -673,7 +784,7 @@ inline void enc_oaserviceerror(std::string& out, const OAServiceError& v, int de
     out += '}';
 }
 
-inline void enc_oaconfigreaderreadresult(std::string& out, const OAConfigReaderReadResult& v, int depth) {
+inline void enc_oa_config_reader_read_result(std::string& out, const OAConfigReaderReadResult& v, int depth) {
     out += '{';
     out += '\n';
     pad(out, depth + 1);
@@ -685,53 +796,44 @@ inline void enc_oaconfigreaderreadresult(std::string& out, const OAConfigReaderR
     out += '}';
 }
 
-inline void enc_oaconfigeditorreaduserresult(std::string& out, const OAConfigEditorReadUserResult& v, int depth) {
+inline void enc_oa_config_editor_read_user_result(std::string& out, const OAConfigEditorReadUserResult& v, int depth) {
     out += '{';
     out += '\n';
     pad(out, depth + 1);
     esc(out, "value");
     out += ": ";
-    enc_usersnapshot(out, v.value, depth + 1);
+    enc_user_snapshot(out, v.value, depth + 1);
     out += '\n';
     pad(out, depth);
     out += '}';
 }
 
-inline void enc_oaconfigeditorreplaceuserresult(std::string& out, const OAConfigEditorReplaceUserResult& v, int depth) {
+inline void enc_oa_config_editor_replace_user_result(std::string& out, const OAConfigEditorReplaceUserResult& v, int depth) {
     out += '{';
     out += '\n';
     pad(out, depth + 1);
     esc(out, "value");
     out += ": ";
-    enc_userreplaceresult(out, v.value, depth + 1);
+    enc_user_replace_result(out, v.value, depth + 1);
     out += '\n';
     pad(out, depth);
     out += '}';
 }
 
-inline void enc_oaconfigobserverobserveresult(std::string& out, const OAConfigObserverObserveResult& v, int depth) {
+inline void enc_oa_config_observer_observe_result(std::string& out, const OAConfigObserverObserveResult& v, int depth) {
     out += '{';
     out += '\n';
     pad(out, depth + 1);
     esc(out, "value");
     out += ": ";
-    enc_configobservation(out, v.value, depth + 1);
+    enc_config_observation(out, v.value, depth + 1);
     out += '\n';
     pad(out, depth);
     out += '}';
-}
-
-inline std::string encode(const Snapshot& v) {
-    std::string out;
-    enc_snapshot(out, v, 0);
-    out += '\n';
-    return out;
 }
 
 inline constexpr int kDepthLimit = 64;
 inline constexpr std::size_t kI64Digits = 19;
-
-
 
 inline void append_rune(std::string& out, std::uint32_t cp) {
     if (cp < 0x80) {
@@ -1049,27 +1151,27 @@ inline std::map<std::string, std::string> str_map(Reader& r) {
     return out;
 }
 
-inline RunOverrides decode_runoverrides(Reader& r);
+inline RunOverrides decode_run_overrides(Reader& r);
 inline Origin decode_origin(Reader& r);
 inline Origins decode_origins(Reader& r);
 inline Snapshot decode_snapshot(Reader& r);
-inline UserSettings decode_usersettings(Reader& r);
-inline UserSnapshot decode_usersnapshot(Reader& r);
-inline UserReplaceResult decode_userreplaceresult(Reader& r);
-inline ConfigObservation decode_configobservation(Reader& r);
-inline OAConfigReaderReadArguments decode_oaconfigreaderreadarguments(Reader& r);
-inline OAConfigEditorReadUserArguments decode_oaconfigeditorreaduserarguments(Reader& r);
-inline OAConfigEditorReplaceUserArguments decode_oaconfigeditorreplaceuserarguments(Reader& r);
-inline OAConfigObserverObserveArguments decode_oaconfigobserverobservearguments(Reader& r);
-inline OAServiceFrame decode_oaserviceframe(Reader& r);
-inline OAServiceReply decode_oaservicereply(Reader& r);
-inline OAServiceError decode_oaserviceerror(Reader& r);
-inline OAConfigReaderReadResult decode_oaconfigreaderreadresult(Reader& r);
-inline OAConfigEditorReadUserResult decode_oaconfigeditorreaduserresult(Reader& r);
-inline OAConfigEditorReplaceUserResult decode_oaconfigeditorreplaceuserresult(Reader& r);
-inline OAConfigObserverObserveResult decode_oaconfigobserverobserveresult(Reader& r);
+inline UserSettings decode_user_settings(Reader& r);
+inline UserSnapshot decode_user_snapshot(Reader& r);
+inline UserReplaceResult decode_user_replace_result(Reader& r);
+inline ConfigObservation decode_config_observation(Reader& r);
+inline OAConfigReaderReadArguments decode_oa_config_reader_read_arguments(Reader& r);
+inline OAConfigEditorReadUserArguments decode_oa_config_editor_read_user_arguments(Reader& r);
+inline OAConfigEditorReplaceUserArguments decode_oa_config_editor_replace_user_arguments(Reader& r);
+inline OAConfigObserverObserveArguments decode_oa_config_observer_observe_arguments(Reader& r);
+inline OAServiceFrame decode_oa_service_frame(Reader& r);
+inline OAServiceReply decode_oa_service_reply(Reader& r);
+inline OAServiceError decode_oa_service_error(Reader& r);
+inline OAConfigReaderReadResult decode_oa_config_reader_read_result(Reader& r);
+inline OAConfigEditorReadUserResult decode_oa_config_editor_read_user_result(Reader& r);
+inline OAConfigEditorReplaceUserResult decode_oa_config_editor_replace_user_result(Reader& r);
+inline OAConfigObserverObserveResult decode_oa_config_observer_observe_result(Reader& r);
 
-inline RunOverrides decode_runoverrides(Reader& r) {
+inline RunOverrides decode_run_overrides(Reader& r) {
     if (r.at() != '{') r.refuse("wrong_type");
     r.enter();
     ++r.pos;
@@ -1265,7 +1367,7 @@ inline Snapshot decode_snapshot(Reader& r) {
     return v;
 }
 
-inline UserSettings decode_usersettings(Reader& r) {
+inline UserSettings decode_user_settings(Reader& r) {
     if (r.at() != '{') r.refuse("wrong_type");
     r.enter();
     ++r.pos;
@@ -1316,7 +1418,7 @@ inline UserSettings decode_usersettings(Reader& r) {
     return v;
 }
 
-inline UserSnapshot decode_usersnapshot(Reader& r) {
+inline UserSnapshot decode_user_snapshot(Reader& r) {
     if (r.at() != '{') r.refuse("wrong_type");
     r.enter();
     ++r.pos;
@@ -1335,7 +1437,7 @@ inline UserSnapshot decode_usersnapshot(Reader& r) {
             if (key == "values") {
                 if (seen & 1u) r.refuse("duplicate_field");
                 seen |= 1u;
-                v.values = decode_usersettings(r);
+                v.values = decode_user_settings(r);
             } else if (key == "revision") {
                 if (seen & 2u) r.refuse("duplicate_field");
                 seen |= 2u;
@@ -1355,11 +1457,12 @@ inline UserSnapshot decode_usersnapshot(Reader& r) {
     return v;
 }
 
-inline UserReplaceResult decode_userreplaceresult(Reader& r) {
+inline UserReplaceResult decode_user_replace_result(Reader& r) {
     if (r.at() != '{') r.refuse("wrong_type");
     r.enter();
     ++r.pos;
     UserReplaceResult v;
+    std::optional<std::string> wire_outcome;
     std::uint32_t seen = 0;
     r.skip_ws();
     if (r.at() != '}') {
@@ -1374,11 +1477,11 @@ inline UserReplaceResult decode_userreplaceresult(Reader& r) {
             if (key == "outcome") {
                 if (seen & 1u) r.refuse("duplicate_field");
                 seen |= 1u;
-                v.outcome = r.str();
+                wire_outcome = r.str();
             } else if (key == "snapshot") {
                 if (seen & 2u) r.refuse("duplicate_field");
                 seen |= 2u;
-                v.snapshot = decode_usersnapshot(r);
+                v.snapshot = decode_user_snapshot(r);
             } else {
                 r.refuse("unknown_field");
             }
@@ -1391,15 +1494,20 @@ inline UserReplaceResult decode_userreplaceresult(Reader& r) {
     ++r.pos;
     --r.depth;
     if ((seen & 3u) != 3u) r.refuse("missing_field");
-    if (v.outcome != "applied" && v.outcome != "conflict" && v.outcome != "forbidden" && v.outcome != "unavailable") { r.refuse("bad_enum"); }
+    if (wire_outcome) {
+        const auto parsed = parse_user_replace_outcome(*wire_outcome);
+        if (!parsed) r.refuse("bad_enum");
+        v.outcome = *parsed;
+    }
     return v;
 }
 
-inline ConfigObservation decode_configobservation(Reader& r) {
+inline ConfigObservation decode_config_observation(Reader& r) {
     if (r.at() != '{') r.refuse("wrong_type");
     r.enter();
     ++r.pos;
     ConfigObservation v;
+    std::optional<std::string> wire_outcome;
     std::uint32_t seen = 0;
     r.skip_ws();
     if (r.at() != '}') {
@@ -1414,7 +1522,7 @@ inline ConfigObservation decode_configobservation(Reader& r) {
             if (key == "outcome") {
                 if (seen & 1u) r.refuse("duplicate_field");
                 seen |= 1u;
-                v.outcome = r.str();
+                wire_outcome = r.str();
             } else if (key == "cursor") {
                 if (seen & 2u) r.refuse("duplicate_field");
                 seen |= 2u;
@@ -1435,11 +1543,15 @@ inline ConfigObservation decode_configobservation(Reader& r) {
     ++r.pos;
     --r.depth;
     if ((seen & 3u) != 3u) r.refuse("missing_field");
-    if (v.outcome != "snapshot" && v.outcome != "unchanged" && v.outcome != "gap" && v.outcome != "unavailable" && v.outcome != "unsupported" && v.outcome != "invalid") { r.refuse("bad_enum"); }
+    if (wire_outcome) {
+        const auto parsed = parse_config_observation_outcome(*wire_outcome);
+        if (!parsed) r.refuse("bad_enum");
+        v.outcome = *parsed;
+    }
     return v;
 }
 
-inline OAConfigReaderReadArguments decode_oaconfigreaderreadarguments(Reader& r) {
+inline OAConfigReaderReadArguments decode_oa_config_reader_read_arguments(Reader& r) {
     if (r.at() != '{') r.refuse("wrong_type");
     r.enter();
     ++r.pos;
@@ -1458,7 +1570,7 @@ inline OAConfigReaderReadArguments decode_oaconfigreaderreadarguments(Reader& r)
             if (key == "overrides") {
                 if (seen & 1u) r.refuse("duplicate_field");
                 seen |= 1u;
-                v.overrides = decode_runoverrides(r);
+                v.overrides = decode_run_overrides(r);
             } else {
                 r.refuse("unknown_field");
             }
@@ -1474,7 +1586,7 @@ inline OAConfigReaderReadArguments decode_oaconfigreaderreadarguments(Reader& r)
     return v;
 }
 
-inline OAConfigEditorReadUserArguments decode_oaconfigeditorreaduserarguments(Reader& r) {
+inline OAConfigEditorReadUserArguments decode_oa_config_editor_read_user_arguments(Reader& r) {
     if (r.at() != '{') r.refuse("wrong_type");
     r.enter();
     ++r.pos;
@@ -1505,7 +1617,7 @@ inline OAConfigEditorReadUserArguments decode_oaconfigeditorreaduserarguments(Re
     return v;
 }
 
-inline OAConfigEditorReplaceUserArguments decode_oaconfigeditorreplaceuserarguments(Reader& r) {
+inline OAConfigEditorReplaceUserArguments decode_oa_config_editor_replace_user_arguments(Reader& r) {
     if (r.at() != '{') r.refuse("wrong_type");
     r.enter();
     ++r.pos;
@@ -1528,7 +1640,7 @@ inline OAConfigEditorReplaceUserArguments decode_oaconfigeditorreplaceuserargume
             } else if (key == "values") {
                 if (seen & 2u) r.refuse("duplicate_field");
                 seen |= 2u;
-                v.values = decode_usersettings(r);
+                v.values = decode_user_settings(r);
             } else {
                 r.refuse("unknown_field");
             }
@@ -1544,7 +1656,7 @@ inline OAConfigEditorReplaceUserArguments decode_oaconfigeditorreplaceuserargume
     return v;
 }
 
-inline OAConfigObserverObserveArguments decode_oaconfigobserverobservearguments(Reader& r) {
+inline OAConfigObserverObserveArguments decode_oa_config_observer_observe_arguments(Reader& r) {
     if (r.at() != '{') r.refuse("wrong_type");
     r.enter();
     ++r.pos;
@@ -1563,7 +1675,7 @@ inline OAConfigObserverObserveArguments decode_oaconfigobserverobservearguments(
             if (key == "overrides") {
                 if (seen & 1u) r.refuse("duplicate_field");
                 seen |= 1u;
-                v.overrides = decode_runoverrides(r);
+                v.overrides = decode_run_overrides(r);
             } else if (key == "cursor") {
                 if (seen & 2u) r.refuse("duplicate_field");
                 seen |= 2u;
@@ -1587,7 +1699,7 @@ inline OAConfigObserverObserveArguments decode_oaconfigobserverobservearguments(
     return v;
 }
 
-inline OAServiceFrame decode_oaserviceframe(Reader& r) {
+inline OAServiceFrame decode_oa_service_frame(Reader& r) {
     if (r.at() != '{') r.refuse("wrong_type");
     r.enter();
     ++r.pos;
@@ -1634,7 +1746,7 @@ inline OAServiceFrame decode_oaserviceframe(Reader& r) {
     return v;
 }
 
-inline OAServiceReply decode_oaservicereply(Reader& r) {
+inline OAServiceReply decode_oa_service_reply(Reader& r) {
     if (r.at() != '{') r.refuse("wrong_type");
     r.enter();
     ++r.pos;
@@ -1685,7 +1797,7 @@ inline OAServiceReply decode_oaservicereply(Reader& r) {
     return v;
 }
 
-inline OAServiceError decode_oaserviceerror(Reader& r) {
+inline OAServiceError decode_oa_service_error(Reader& r) {
     if (r.at() != '{') r.refuse("wrong_type");
     r.enter();
     ++r.pos;
@@ -1724,7 +1836,7 @@ inline OAServiceError decode_oaserviceerror(Reader& r) {
     return v;
 }
 
-inline OAConfigReaderReadResult decode_oaconfigreaderreadresult(Reader& r) {
+inline OAConfigReaderReadResult decode_oa_config_reader_read_result(Reader& r) {
     if (r.at() != '{') r.refuse("wrong_type");
     r.enter();
     ++r.pos;
@@ -1759,7 +1871,7 @@ inline OAConfigReaderReadResult decode_oaconfigreaderreadresult(Reader& r) {
     return v;
 }
 
-inline OAConfigEditorReadUserResult decode_oaconfigeditorreaduserresult(Reader& r) {
+inline OAConfigEditorReadUserResult decode_oa_config_editor_read_user_result(Reader& r) {
     if (r.at() != '{') r.refuse("wrong_type");
     r.enter();
     ++r.pos;
@@ -1778,7 +1890,7 @@ inline OAConfigEditorReadUserResult decode_oaconfigeditorreaduserresult(Reader& 
             if (key == "value") {
                 if (seen & 1u) r.refuse("duplicate_field");
                 seen |= 1u;
-                v.value = decode_usersnapshot(r);
+                v.value = decode_user_snapshot(r);
             } else {
                 r.refuse("unknown_field");
             }
@@ -1794,7 +1906,7 @@ inline OAConfigEditorReadUserResult decode_oaconfigeditorreaduserresult(Reader& 
     return v;
 }
 
-inline OAConfigEditorReplaceUserResult decode_oaconfigeditorreplaceuserresult(Reader& r) {
+inline OAConfigEditorReplaceUserResult decode_oa_config_editor_replace_user_result(Reader& r) {
     if (r.at() != '{') r.refuse("wrong_type");
     r.enter();
     ++r.pos;
@@ -1813,7 +1925,7 @@ inline OAConfigEditorReplaceUserResult decode_oaconfigeditorreplaceuserresult(Re
             if (key == "value") {
                 if (seen & 1u) r.refuse("duplicate_field");
                 seen |= 1u;
-                v.value = decode_userreplaceresult(r);
+                v.value = decode_user_replace_result(r);
             } else {
                 r.refuse("unknown_field");
             }
@@ -1829,7 +1941,7 @@ inline OAConfigEditorReplaceUserResult decode_oaconfigeditorreplaceuserresult(Re
     return v;
 }
 
-inline OAConfigObserverObserveResult decode_oaconfigobserverobserveresult(Reader& r) {
+inline OAConfigObserverObserveResult decode_oa_config_observer_observe_result(Reader& r) {
     if (r.at() != '{') r.refuse("wrong_type");
     r.enter();
     ++r.pos;
@@ -1848,7 +1960,7 @@ inline OAConfigObserverObserveResult decode_oaconfigobserverobserveresult(Reader
             if (key == "value") {
                 if (seen & 1u) r.refuse("duplicate_field");
                 seen |= 1u;
-                v.value = decode_configobservation(r);
+                v.value = decode_config_observation(r);
             } else {
                 r.refuse("unknown_field");
             }
@@ -1864,15 +1976,25 @@ inline OAConfigObserverObserveResult decode_oaconfigobserverobserveresult(Reader
     return v;
 }
 
+}  // namespace detail
+
+inline std::string encode(const Snapshot& v) {
+    std::string out;
+    detail::enc_snapshot(out, v, 0);
+    out += '\n';
+    return out;
+}
+
 inline Snapshot decode(std::string_view data) {
-    Reader r{data};
+    detail::Reader r{data};
     r.skip_ws();
-    Snapshot v = decode_snapshot(r);
+    Snapshot v = detail::decode_snapshot(r);
     r.skip_ws();
     if (r.pos < r.buf.size()) r.refuse("trailing_bytes");
     return v;
 }
 
+namespace detail {
 // kRefusals is in the order two of them are chosen between.
 inline const std::vector<std::string> kRefusals = {"malformed", "bad_string", "number_spelling", "wrong_type", "depth_exceeded", "duplicate_field", "unknown_field", "missing_field", "bad_enum", "trailing_bytes"};
 
@@ -1881,152 +2003,212 @@ inline int refusal_rank(std::string_view word) {
         if (kRefusals[i] == word) return static_cast<int>(i);
     return -1;
 }
+}  // namespace detail
 
-struct FrameWriter{virtual ~FrameWriter()=default;virtual void WriteFrame(std::string_view)=0;};
+struct FrameWriter{virtual ~FrameWriter()=default;virtual void write_frame(std::string_view frame)=0;};
 struct DispatchError:std::runtime_error{using std::runtime_error::runtime_error;};
-inline OAServiceFrame service_payload(std::string_view frame){Reader r{frame};r.skip_ws();auto v=decode_oaserviceframe(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");if(v.version!=1)throw DispatchError("unknown_version");return v;}
+namespace detail {
+inline OAServiceFrame service_payload(std::string_view frame){Reader r{frame};r.skip_ws();auto v=decode_oa_service_frame(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");if(v.version!=1)throw DispatchError("unknown_version");return v;}
+}  // namespace detail
 // Validates the request envelope and version; dispatchers validate typed arguments.
-inline std::string service_name(std::string_view frame){return service_payload(frame).service;}
+inline std::string service_name(std::string_view frame){return detail::service_payload(frame).service;}
 
-struct FrameExchanger{virtual ~FrameExchanger()=default;virtual std::string ExchangeFrame(std::string_view)=0;};
+struct FrameExchanger{virtual ~FrameExchanger()=default;virtual std::string exchange_frame(std::string_view frame)=0;};
 struct ServiceError:std::runtime_error{std::string code,message;ServiceError(std::string c,std::string m):std::runtime_error(m.empty()?c:m),code(c),message(m){}};
+namespace detail {
 inline Raw service_response(std::string_view frame,std::string_view service,std::string_view method){
- Reader r{frame};r.skip_ws();auto v=decode_oaservicereply(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");if(v.version!=1)throw DispatchError("unknown_version");if(v.service!=service||v.method!=method)throw DispatchError("mismatched_response");
- if(!v.ok){Reader e{v.payload};e.depth=1;e.skip_ws();auto error=decode_oaserviceerror(e);e.skip_ws();if(e.pos!=e.buf.size())e.refuse("trailing_bytes");if(error.code.empty())throw DispatchError("invalid_error");throw ServiceError(error.code,error.message);}return v.payload;
+ Reader r{frame};r.skip_ws();auto v=decode_oa_service_reply(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");if(v.version!=1)throw DispatchError("unknown_version");if(v.service!=service||v.method!=method)throw DispatchError("mismatched_response");
+ if(!v.ok){Reader e{v.payload};e.depth=1;e.skip_ws();auto error=decode_oa_service_error(e);e.skip_ws();if(e.pos!=e.buf.size())e.refuse("trailing_bytes");if(error.code.empty())throw DispatchError("invalid_error");throw ServiceError(error.code,error.message);}return v.payload;
 }
 inline std::string service_reply(const OAServiceFrame& request,const Raw& payload,const ServiceError* error=nullptr){
  OAServiceReply reply;reply.version=1;reply.service=request.service;reply.method=request.method;reply.ok=error==nullptr;reply.payload=payload;
- if(error){OAServiceError e;e.code=error->code.empty()?"handler_error":error->code;e.message=error->message;reply.payload.clear();enc_oaserviceerror(reply.payload,e,1);}
- std::string frame;enc_oaservicereply(frame,reply,0);Reader r{frame};r.skip_ws();decode_oaservicereply(r);return frame;
+ if(error){OAServiceError e;e.code=error->code.empty()?"handler_error":error->code;e.message=error->message;reply.payload.clear();enc_oa_service_error(reply.payload,e,1);}
+ std::string frame;enc_oa_service_reply(frame,reply,0);Reader r{frame};r.skip_ws();decode_oa_service_reply(r);return frame;
+}
+}  // namespace detail
+
+// The base-protocol service every dispatcher answers beside its own.
+inline constexpr std::string_view kEndpointContract="abstraction.facade/endpoint@1";
+// One service an endpoint hosts, as a dispatcher of any generated namespace
+// reports it to describe_endpoint.
+struct DescribedService{std::string contract;bool ready;std::string why;};
+namespace detail {
+template<class H>auto ready_hook(int)->decltype((void)static_cast<H*>(nullptr)->ready(),static_cast<bool(*)(void*,std::string&)>(nullptr)){return [](void* h,std::string& why)->bool{auto r=static_cast<H*>(h)->ready();why=r.second;return r.first;};}
+template<class H>bool(*ready_hook(long))(void*,std::string&){return nullptr;}
+}  // namespace detail
+// Answers an abstraction.facade/endpoint@1 Describe frame for an endpoint
+// hosting services, in that order: each is a dispatcher of any generated
+// namespace. program and version are the provider's own display name and
+// version, never authority. A frame for another service reads unknown_service.
+template<class... Services>std::string describe_endpoint(std::string_view frame,const std::string& program,const std::string& version,const Services&... services){
+ auto v=detail::service_payload(frame);
+ if(v.service!=kEndpointContract){ServiceError e("unknown_service","");return detail::service_reply(v,"",&e);}
+ if(v.method!="Describe"){ServiceError e("unknown_method","");return detail::service_reply(v,"",&e);}
+ detail::Reader r{v.arguments};r.skip_ws();bool empty=false;
+ if(r.pos<r.buf.size()&&r.buf[r.pos]=='{'){r.pos++;r.skip_ws();if(r.pos<r.buf.size()&&r.buf[r.pos]=='}'){r.pos++;r.skip_ws();empty=r.pos==r.buf.size();}}
+ if(!empty){ServiceError e("unknown_field","");return detail::service_reply(v,"",&e);}
+ try{
+  Raw out="{\"value\":{\"outcome\":\"described\",\"program\":";detail::esc(out,program);out+=",\"version\":";detail::esc(out,version);out+=",\"services\":[";
+  bool first=true;
+  auto add=[&](const auto& s){if(!first)out+=',';first=false;out+="{\"contract\":";detail::esc(out,s.contract);out+=",\"readiness\":\"";out+=s.ready?"ready":"not_ready";out+="\",\"why\":";detail::esc(out,s.why);out+=",\"guarantees\":[],\"capabilities\":{}}";};
+  (void)add;
+  (add(services.describe_service()),...);
+  out+="]}}";
+  return detail::service_reply(v,out);
+ }catch(const Refusal&e){ServiceError error(e.word,"");return detail::service_reply(v,"",&error);}
 }
 struct ConfigReader{virtual ~ConfigReader()=default;
-virtual Snapshot Read(const RunOverrides& arg0)=0;
+virtual Snapshot read(const RunOverrides& overrides)=0;
 };
 template<class Transport>struct ConfigReaderClient:ConfigReader{Transport& transport_;explicit ConfigReaderClient(Transport&t):transport_(t){}
-Snapshot Read(const RunOverrides& arg0)override{OAConfigReaderReadArguments args;
-args.overrides=arg0;
-OAServiceFrame v;v.version=1;v.service="abstraction.config/reader@1";v.method="Read";enc_oaconfigreaderreadarguments(v.arguments,args,1);std::string frame;enc_oaserviceframe(frame,v,0);service_payload(frame);
-auto response=transport_.ExchangeFrame(frame);auto payload=service_response(response,v.service,v.method);Reader r{payload};r.depth=1;r.skip_ws();auto result=decode_oaconfigreaderreadresult(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");
+Snapshot read(const RunOverrides& overrides)override{detail::OAConfigReaderReadArguments args;
+args.overrides=overrides;
+detail::OAServiceFrame v;v.version=1;v.service="abstraction.config/reader@1";v.method="Read";detail::enc_oa_config_reader_read_arguments(v.arguments,args,1);std::string frame;detail::enc_oa_service_frame(frame,v,0);detail::service_payload(frame);
+auto response=transport_.exchange_frame(frame);auto payload=detail::service_response(response,v.service,v.method);detail::Reader r{payload};r.depth=1;r.skip_ws();auto result=detail::decode_oa_config_reader_read_result(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");
 return result.value;
 }
 };
-struct ConfigReaderService{inline static constexpr std::string_view wire_name="abstraction.config/reader@1";inline static constexpr std::string_view capability="abstraction.config";template<class Transport>using Client=ConfigReaderClient<Transport>;};
+struct ConfigReaderService{inline static constexpr std::string_view kWireName="abstraction.config/reader@1";inline static constexpr std::string_view kCapability="abstraction.config";template<class Transport>using Client=ConfigReaderClient<Transport>;};
 struct ConfigReaderDispatcher:FrameWriter,FrameExchanger{ConfigReader&handler;explicit ConfigReaderDispatcher(ConfigReader&h):handler(h){}
-void WriteFrame(std::string_view frame)override{auto v=service_payload(frame);if(v.service!="abstraction.config/reader@1")throw DispatchError("unknown_service");
+// A handler whose own type has ready(), returning a pair of bool and std::string, reports its readiness through describe_service.
+template<class H,class=decltype(static_cast<ConfigReader&>(*static_cast<H*>(nullptr)))>explicit ConfigReaderDispatcher(H&h):handler(h),ready_self_(&h),ready_hook_(detail::ready_hook<H>(0)){}
+// This dispatcher's service as abstraction.facade/endpoint@1 Describe lists it.
+DescribedService describe_service()const{DescribedService s{"abstraction.config/reader@1",true,std::string()};if(ready_hook_){s.ready=ready_hook_(ready_self_,s.why);if(s.ready)s.why.clear();}return s;}
+void write_frame(std::string_view frame)override{auto v=detail::service_payload(frame);if(v.service!="abstraction.config/reader@1")throw DispatchError("unknown_service");
 if(v.method=="Read"){
 throw DispatchError("wrong_mode");}
 throw DispatchError("unknown_method");}
-std::string ExchangeFrame(std::string_view frame)override{auto v=service_payload(frame);if(v.service!="abstraction.config/reader@1"){ServiceError e("unknown_service","");return service_reply(v,"",&e);}
+std::string exchange_frame(std::string_view frame)override{auto v=detail::service_payload(frame);if(v.service==kEndpointContract)return describe_endpoint(frame,std::string(),std::string(),*this);if(v.service!="abstraction.config/reader@1"){ServiceError e("unknown_service","");return detail::service_reply(v,"",&e);}
 try{
 if(v.method=="Read"){
-Reader r{v.arguments};r.depth=1;r.skip_ws();auto args=decode_oaconfigreaderreadarguments(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");auto payload=invoke_Read(args);return service_reply(v,payload);}
-throw ServiceError("unknown_method","");}catch(const ServiceError&e){return service_reply(v,"",&e);}catch(const Refusal&e){ServiceError error(e.word,"");return service_reply(v,"",&error);}
+detail::Reader r{v.arguments};r.depth=1;r.skip_ws();auto args=detail::decode_oa_config_reader_read_arguments(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");auto payload=invoke_read(args);return detail::service_reply(v,payload);}
+throw ServiceError("unknown_method","");}catch(const ServiceError&e){return detail::service_reply(v,"",&e);}catch(const Refusal&e){ServiceError error(e.word,"");return detail::service_reply(v,"",&error);}
 }
-Raw invoke_Read(const OAConfigReaderReadArguments&args){
+private:
+Raw invoke_read(const detail::OAConfigReaderReadArguments&args){
 Snapshot result{};
 try{
-result=handler.Read(args.overrides);
+result=handler.read(args.overrides);
 }catch(const ServiceError&){throw;}catch(...){throw ServiceError("handler_error","handler failed");}
 try{
-OAConfigReaderReadResult value;
+detail::OAConfigReaderReadResult value;
 value.value=result;
-Raw payload;enc_oaconfigreaderreadresult(payload,value,1);Reader r{payload};r.depth=1;r.skip_ws();decode_oaconfigreaderreadresult(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");return payload;
+Raw payload;detail::enc_oa_config_reader_read_result(payload,value,1);detail::Reader r{payload};r.depth=1;r.skip_ws();detail::decode_oa_config_reader_read_result(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");return payload;
 }catch(...){throw ServiceError("invalid_result","");}
 }
+private:
+void* ready_self_=nullptr;
+bool(*ready_hook_)(void*,std::string&)=nullptr;
 };
 struct ConfigEditor{virtual ~ConfigEditor()=default;
-virtual UserSnapshot ReadUser()=0;
-virtual UserReplaceResult ReplaceUser(const std::string& arg0,const UserSettings& arg1)=0;
+virtual UserSnapshot read_user()=0;
+virtual UserReplaceResult replace_user(const std::string& expected_revision,const UserSettings& values)=0;
 };
 template<class Transport>struct ConfigEditorClient:ConfigEditor{Transport& transport_;explicit ConfigEditorClient(Transport&t):transport_(t){}
-UserSnapshot ReadUser()override{OAConfigEditorReadUserArguments args;
-OAServiceFrame v;v.version=1;v.service="abstraction.config/editor@1";v.method="ReadUser";enc_oaconfigeditorreaduserarguments(v.arguments,args,1);std::string frame;enc_oaserviceframe(frame,v,0);service_payload(frame);
-auto response=transport_.ExchangeFrame(frame);auto payload=service_response(response,v.service,v.method);Reader r{payload};r.depth=1;r.skip_ws();auto result=decode_oaconfigeditorreaduserresult(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");
+UserSnapshot read_user()override{detail::OAConfigEditorReadUserArguments args;
+detail::OAServiceFrame v;v.version=1;v.service="abstraction.config/editor@1";v.method="ReadUser";detail::enc_oa_config_editor_read_user_arguments(v.arguments,args,1);std::string frame;detail::enc_oa_service_frame(frame,v,0);detail::service_payload(frame);
+auto response=transport_.exchange_frame(frame);auto payload=detail::service_response(response,v.service,v.method);detail::Reader r{payload};r.depth=1;r.skip_ws();auto result=detail::decode_oa_config_editor_read_user_result(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");
 return result.value;
 }
-UserReplaceResult ReplaceUser(const std::string& arg0,const UserSettings& arg1)override{OAConfigEditorReplaceUserArguments args;
-args.expected_revision=arg0;
-args.values=arg1;
-OAServiceFrame v;v.version=1;v.service="abstraction.config/editor@1";v.method="ReplaceUser";enc_oaconfigeditorreplaceuserarguments(v.arguments,args,1);std::string frame;enc_oaserviceframe(frame,v,0);service_payload(frame);
-auto response=transport_.ExchangeFrame(frame);auto payload=service_response(response,v.service,v.method);Reader r{payload};r.depth=1;r.skip_ws();auto result=decode_oaconfigeditorreplaceuserresult(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");
+UserReplaceResult replace_user(const std::string& expected_revision,const UserSettings& values)override{detail::OAConfigEditorReplaceUserArguments args;
+args.expected_revision=expected_revision;
+args.values=values;
+detail::OAServiceFrame v;v.version=1;v.service="abstraction.config/editor@1";v.method="ReplaceUser";detail::enc_oa_config_editor_replace_user_arguments(v.arguments,args,1);std::string frame;detail::enc_oa_service_frame(frame,v,0);detail::service_payload(frame);
+auto response=transport_.exchange_frame(frame);auto payload=detail::service_response(response,v.service,v.method);detail::Reader r{payload};r.depth=1;r.skip_ws();auto result=detail::decode_oa_config_editor_replace_user_result(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");
 return result.value;
 }
 };
-struct ConfigEditorService{inline static constexpr std::string_view wire_name="abstraction.config/editor@1";inline static constexpr std::string_view capability="abstraction.config";template<class Transport>using Client=ConfigEditorClient<Transport>;};
+struct ConfigEditorService{inline static constexpr std::string_view kWireName="abstraction.config/editor@1";inline static constexpr std::string_view kCapability="abstraction.config";template<class Transport>using Client=ConfigEditorClient<Transport>;};
 struct ConfigEditorDispatcher:FrameWriter,FrameExchanger{ConfigEditor&handler;explicit ConfigEditorDispatcher(ConfigEditor&h):handler(h){}
-void WriteFrame(std::string_view frame)override{auto v=service_payload(frame);if(v.service!="abstraction.config/editor@1")throw DispatchError("unknown_service");
+// A handler whose own type has ready(), returning a pair of bool and std::string, reports its readiness through describe_service.
+template<class H,class=decltype(static_cast<ConfigEditor&>(*static_cast<H*>(nullptr)))>explicit ConfigEditorDispatcher(H&h):handler(h),ready_self_(&h),ready_hook_(detail::ready_hook<H>(0)){}
+// This dispatcher's service as abstraction.facade/endpoint@1 Describe lists it.
+DescribedService describe_service()const{DescribedService s{"abstraction.config/editor@1",true,std::string()};if(ready_hook_){s.ready=ready_hook_(ready_self_,s.why);if(s.ready)s.why.clear();}return s;}
+void write_frame(std::string_view frame)override{auto v=detail::service_payload(frame);if(v.service!="abstraction.config/editor@1")throw DispatchError("unknown_service");
 if(v.method=="ReadUser"){
 throw DispatchError("wrong_mode");}
 if(v.method=="ReplaceUser"){
 throw DispatchError("wrong_mode");}
 throw DispatchError("unknown_method");}
-std::string ExchangeFrame(std::string_view frame)override{auto v=service_payload(frame);if(v.service!="abstraction.config/editor@1"){ServiceError e("unknown_service","");return service_reply(v,"",&e);}
+std::string exchange_frame(std::string_view frame)override{auto v=detail::service_payload(frame);if(v.service==kEndpointContract)return describe_endpoint(frame,std::string(),std::string(),*this);if(v.service!="abstraction.config/editor@1"){ServiceError e("unknown_service","");return detail::service_reply(v,"",&e);}
 try{
 if(v.method=="ReadUser"){
-Reader r{v.arguments};r.depth=1;r.skip_ws();auto args=decode_oaconfigeditorreaduserarguments(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");auto payload=invoke_ReadUser(args);return service_reply(v,payload);}
+detail::Reader r{v.arguments};r.depth=1;r.skip_ws();auto args=detail::decode_oa_config_editor_read_user_arguments(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");auto payload=invoke_read_user(args);return detail::service_reply(v,payload);}
 if(v.method=="ReplaceUser"){
-Reader r{v.arguments};r.depth=1;r.skip_ws();auto args=decode_oaconfigeditorreplaceuserarguments(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");auto payload=invoke_ReplaceUser(args);return service_reply(v,payload);}
-throw ServiceError("unknown_method","");}catch(const ServiceError&e){return service_reply(v,"",&e);}catch(const Refusal&e){ServiceError error(e.word,"");return service_reply(v,"",&error);}
+detail::Reader r{v.arguments};r.depth=1;r.skip_ws();auto args=detail::decode_oa_config_editor_replace_user_arguments(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");auto payload=invoke_replace_user(args);return detail::service_reply(v,payload);}
+throw ServiceError("unknown_method","");}catch(const ServiceError&e){return detail::service_reply(v,"",&e);}catch(const Refusal&e){ServiceError error(e.word,"");return detail::service_reply(v,"",&error);}
 }
-Raw invoke_ReadUser(const OAConfigEditorReadUserArguments&args){
+private:
+Raw invoke_read_user(const detail::OAConfigEditorReadUserArguments&args){
 UserSnapshot result{};
 try{
-result=handler.ReadUser();
+result=handler.read_user();
 }catch(const ServiceError&){throw;}catch(...){throw ServiceError("handler_error","handler failed");}
 try{
-OAConfigEditorReadUserResult value;
+detail::OAConfigEditorReadUserResult value;
 value.value=result;
-Raw payload;enc_oaconfigeditorreaduserresult(payload,value,1);Reader r{payload};r.depth=1;r.skip_ws();decode_oaconfigeditorreaduserresult(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");return payload;
+Raw payload;detail::enc_oa_config_editor_read_user_result(payload,value,1);detail::Reader r{payload};r.depth=1;r.skip_ws();detail::decode_oa_config_editor_read_user_result(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");return payload;
 }catch(...){throw ServiceError("invalid_result","");}
 }
-Raw invoke_ReplaceUser(const OAConfigEditorReplaceUserArguments&args){
+Raw invoke_replace_user(const detail::OAConfigEditorReplaceUserArguments&args){
 UserReplaceResult result{};
 try{
-result=handler.ReplaceUser(args.expected_revision,args.values);
+result=handler.replace_user(args.expected_revision,args.values);
 }catch(const ServiceError&){throw;}catch(...){throw ServiceError("handler_error","handler failed");}
 try{
-OAConfigEditorReplaceUserResult value;
+detail::OAConfigEditorReplaceUserResult value;
 value.value=result;
-Raw payload;enc_oaconfigeditorreplaceuserresult(payload,value,1);Reader r{payload};r.depth=1;r.skip_ws();decode_oaconfigeditorreplaceuserresult(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");return payload;
+Raw payload;detail::enc_oa_config_editor_replace_user_result(payload,value,1);detail::Reader r{payload};r.depth=1;r.skip_ws();detail::decode_oa_config_editor_replace_user_result(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");return payload;
 }catch(...){throw ServiceError("invalid_result","");}
 }
+private:
+void* ready_self_=nullptr;
+bool(*ready_hook_)(void*,std::string&)=nullptr;
 };
 struct ConfigObserver{virtual ~ConfigObserver()=default;
-virtual ConfigObservation Observe(const RunOverrides& arg0,const std::string& arg1,const std::int64_t& arg2)=0;
+virtual ConfigObservation observe(const RunOverrides& overrides,const std::string& cursor,const std::int64_t& wait_ms)=0;
 };
 template<class Transport>struct ConfigObserverClient:ConfigObserver{Transport& transport_;explicit ConfigObserverClient(Transport&t):transport_(t){}
-ConfigObservation Observe(const RunOverrides& arg0,const std::string& arg1,const std::int64_t& arg2)override{OAConfigObserverObserveArguments args;
-args.overrides=arg0;
-args.cursor=arg1;
-args.wait_ms=arg2;
-OAServiceFrame v;v.version=1;v.service="abstraction.config/observer@1";v.method="Observe";enc_oaconfigobserverobservearguments(v.arguments,args,1);std::string frame;enc_oaserviceframe(frame,v,0);service_payload(frame);
-auto response=transport_.ExchangeFrame(frame);auto payload=service_response(response,v.service,v.method);Reader r{payload};r.depth=1;r.skip_ws();auto result=decode_oaconfigobserverobserveresult(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");
+ConfigObservation observe(const RunOverrides& overrides,const std::string& cursor,const std::int64_t& wait_ms)override{detail::OAConfigObserverObserveArguments args;
+args.overrides=overrides;
+args.cursor=cursor;
+args.wait_ms=wait_ms;
+detail::OAServiceFrame v;v.version=1;v.service="abstraction.config/observer@1";v.method="Observe";detail::enc_oa_config_observer_observe_arguments(v.arguments,args,1);std::string frame;detail::enc_oa_service_frame(frame,v,0);detail::service_payload(frame);
+auto response=transport_.exchange_frame(frame);auto payload=detail::service_response(response,v.service,v.method);detail::Reader r{payload};r.depth=1;r.skip_ws();auto result=detail::decode_oa_config_observer_observe_result(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");
 return result.value;
 }
 };
-struct ConfigObserverService{inline static constexpr std::string_view wire_name="abstraction.config/observer@1";inline static constexpr std::string_view capability="abstraction.config";template<class Transport>using Client=ConfigObserverClient<Transport>;};
+struct ConfigObserverService{inline static constexpr std::string_view kWireName="abstraction.config/observer@1";inline static constexpr std::string_view kCapability="abstraction.config";template<class Transport>using Client=ConfigObserverClient<Transport>;};
 struct ConfigObserverDispatcher:FrameWriter,FrameExchanger{ConfigObserver&handler;explicit ConfigObserverDispatcher(ConfigObserver&h):handler(h){}
-void WriteFrame(std::string_view frame)override{auto v=service_payload(frame);if(v.service!="abstraction.config/observer@1")throw DispatchError("unknown_service");
+// A handler whose own type has ready(), returning a pair of bool and std::string, reports its readiness through describe_service.
+template<class H,class=decltype(static_cast<ConfigObserver&>(*static_cast<H*>(nullptr)))>explicit ConfigObserverDispatcher(H&h):handler(h),ready_self_(&h),ready_hook_(detail::ready_hook<H>(0)){}
+// This dispatcher's service as abstraction.facade/endpoint@1 Describe lists it.
+DescribedService describe_service()const{DescribedService s{"abstraction.config/observer@1",true,std::string()};if(ready_hook_){s.ready=ready_hook_(ready_self_,s.why);if(s.ready)s.why.clear();}return s;}
+void write_frame(std::string_view frame)override{auto v=detail::service_payload(frame);if(v.service!="abstraction.config/observer@1")throw DispatchError("unknown_service");
 if(v.method=="Observe"){
 throw DispatchError("wrong_mode");}
 throw DispatchError("unknown_method");}
-std::string ExchangeFrame(std::string_view frame)override{auto v=service_payload(frame);if(v.service!="abstraction.config/observer@1"){ServiceError e("unknown_service","");return service_reply(v,"",&e);}
+std::string exchange_frame(std::string_view frame)override{auto v=detail::service_payload(frame);if(v.service==kEndpointContract)return describe_endpoint(frame,std::string(),std::string(),*this);if(v.service!="abstraction.config/observer@1"){ServiceError e("unknown_service","");return detail::service_reply(v,"",&e);}
 try{
 if(v.method=="Observe"){
-Reader r{v.arguments};r.depth=1;r.skip_ws();auto args=decode_oaconfigobserverobservearguments(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");auto payload=invoke_Observe(args);return service_reply(v,payload);}
-throw ServiceError("unknown_method","");}catch(const ServiceError&e){return service_reply(v,"",&e);}catch(const Refusal&e){ServiceError error(e.word,"");return service_reply(v,"",&error);}
+detail::Reader r{v.arguments};r.depth=1;r.skip_ws();auto args=detail::decode_oa_config_observer_observe_arguments(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");auto payload=invoke_observe(args);return detail::service_reply(v,payload);}
+throw ServiceError("unknown_method","");}catch(const ServiceError&e){return detail::service_reply(v,"",&e);}catch(const Refusal&e){ServiceError error(e.word,"");return detail::service_reply(v,"",&error);}
 }
-Raw invoke_Observe(const OAConfigObserverObserveArguments&args){
+private:
+Raw invoke_observe(const detail::OAConfigObserverObserveArguments&args){
 ConfigObservation result{};
 try{
-result=handler.Observe(args.overrides,args.cursor,args.wait_ms);
+result=handler.observe(args.overrides,args.cursor,args.wait_ms);
 }catch(const ServiceError&){throw;}catch(...){throw ServiceError("handler_error","handler failed");}
 try{
-OAConfigObserverObserveResult value;
+detail::OAConfigObserverObserveResult value;
 value.value=result;
-Raw payload;enc_oaconfigobserverobserveresult(payload,value,1);Reader r{payload};r.depth=1;r.skip_ws();decode_oaconfigobserverobserveresult(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");return payload;
+Raw payload;detail::enc_oa_config_observer_observe_result(payload,value,1);detail::Reader r{payload};r.depth=1;r.skip_ws();detail::decode_oa_config_observer_observe_result(r);r.skip_ws();if(r.pos!=r.buf.size())r.refuse("trailing_bytes");return payload;
 }catch(...){throw ServiceError("invalid_result","");}
 }
+private:
+void* ready_self_=nullptr;
+bool(*ready_hook_)(void*,std::string&)=nullptr;
 };
 
 }  // namespace abstraction::config

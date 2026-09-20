@@ -157,13 +157,25 @@ func ReplaceUserStore(store casapi.Store, path, expected string, values Config) 
 // existing trusted machine rung and explicit caller run overrides. Provenance
 // stays config-owned; a selected user backend failure is not an empty setting.
 func LoadWithUserStore(store casapi.Store, path string, overrides map[string]string) (Config, error) {
+	return LoadWithSources(store, path, MachinePath(), overrides)
+}
+
+// LoadWithSources is LoadWithUserStore with the machine rung read from
+// machinePath. An empty machinePath reads no machine rung: a runtime isolated
+// from the installation reads neither the administrator's file nor its
+// directory.
+func LoadWithSources(store casapi.Store, path, machinePath string, overrides map[string]string) (Config, error) {
+	return loadWithSources(store, path, machinePath, trusted, overrides)
+}
+
+func loadWithSources(store casapi.Store, path, machinePath string, trust func(string) error, overrides map[string]string) (Config, error) {
 	value, err := readUserValue(store, path)
 	if err != nil {
 		return Config{}, err
 	}
 	var machine Config
-	if p := MachinePath(); p != "" {
-		if loaded, e := readMachineBounded(p); e == nil {
+	if machinePath != "" {
+		if loaded, e := readMachineSource(machinePath, trust); e == nil {
 			machine = loaded
 		}
 	}

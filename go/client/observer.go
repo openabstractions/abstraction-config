@@ -20,7 +20,7 @@ func NewObserver(endpoint string) *Observer {
 
 // NewObserverWithTransport retains the caller's endpoint, server trust and waiting limits.
 func NewObserverWithTransport(transport listen.FrameClient) *Observer {
-	return &Observer{transport.WithDefaults(2*time.Second, 1<<20)}
+	return &Observer{transport.WithDefaults(DefaultTimeout, 1<<20)}
 }
 func (c *Observer) WithTimeout(timeout time.Duration) (*Observer, error) {
 	if timeout <= 0 || timeout > 35*time.Second {

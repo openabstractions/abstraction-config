@@ -24,7 +24,7 @@ func TestAMachineFileNobodyPrivilegedWroteIsIgnored(t *testing.T) {
 	}
 	t.Setenv("ProgramData", dir)
 	t.Setenv(EnvVars["store"], "")
-	if got := LegacyLoad().Store; got == "planted" {
+	if got := loadFromProcess().Store; got == "planted" {
 		t.Fatalf("Load took %s, a machine-wide file this unprivileged process wrote", planted)
 	}
 	if _, err := os.Stat(planted); err != nil {

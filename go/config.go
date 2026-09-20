@@ -2,9 +2,6 @@
 // Services use this package to preserve existing user and machine records.
 // Applications resolve ConfigReader or ConfigEditor through the facade; provider
 // paths are diagnostic provenance and are not application storage instructions.
-//
-// LegacyLoad, LegacyJobStore and LegacyWatchQuiet name the embedded file provider
-// for the services and legacy providers that own it.
 package config
 
 import (
@@ -136,12 +133,6 @@ var EnvVars = map[string]string{
 	"log_service": "ABSTRACTION_LOG_SERVICE",
 }
 
-// LegacyLoad returns the machine's configuration from the embedded file
-// provider. It never fails: a machine with nothing set up is a machine with no
-// extra tiers, which every caller already has to handle. Application clients use
-// facade.Discover().ResolveConfig.
-func LegacyLoad() Config { return load(os.Getenv) }
-
 // LoadWithOverrides reads the existing file providers, then applies only the
 // supplied run overrides keyed by existing environment variable names. It never
 // reads the service process's ABSTRACTION_* values on behalf of another caller.
@@ -220,9 +211,8 @@ func read(path, rung string) (Config, error) {
 	return decodeSource(b, path, rung)
 }
 
-// readMachineBounded is the service-side machine source. Trust is checked
+// readMachineSource is the service-side machine source. Trust is checked
 // before reading bytes; callers retain the merged reader's refusal fallback.
-func readMachineBounded(path string) (Config, error) { return readMachineSource(path, trusted) }
 func readMachineSource(path string, checkTrust func(string) error) (Config, error) {
 	if err := checkTrust(path); err != nil {
 		fmt.Fprintf(os.Stderr, "abstraction: ignoring %s: %v\n", path, err)
@@ -461,42 +451,6 @@ func sorted(m map[string]string) []string {
 	}
 	sort.Strings(out)
 	return out
-}
-
-// LegacyJobStore is where the legacy file job store lives on this machine, for
-// the providers that own it. Application clients resolve the job service and
-// retain receipts.
-//
-// Configuration first, then the default. An existing ~/.modelget keeps being
-// the store, because moving the default on upgrade would strand whatever is in
-// flight — a store is a directory of real work, not a cache.
-//
-// # Why it is here and not in download
-//
-// It used to be download.StoreRoot, exported, and that was two mistakes at
-// once. Jobs are not downloads: a store holds work of every kind, and the
-// download layer had no business being the place other programs asked where it
-// lives. And the name said `Root` — a filesystem word in the public API of a
-// layer whose whole claim is that it does not know what a file is.
-//
-// It cannot live in the job package either, and that is deliberate rather than
-// awkward: job has no dependencies at all, which is what lets three languages
-// implement the semantics without inheriting anybody's configuration format.
-// Resolving "what has this machine been told" is exactly this package's job,
-// and it already answers the same shape of question in UserPath and
-// MachinePath.
-func LegacyJobStore() (string, error) {
-	if v := LegacyLoad().Store; v != "" {
-		return v, nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	if legacy := filepath.Join(home, ".modelget"); dirExists(legacy) {
-		return legacy, nil
-	}
-	return filepath.Join(home, "."+Name), nil
 }
 
 func dirExists(p string) bool {

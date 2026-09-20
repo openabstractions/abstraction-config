@@ -10,28 +10,28 @@ class Editor {
 public:
  explicit Editor(std::string endpoint):endpoint_(std::move(endpoint)){}
  Editor(std::string endpoint, ipc::Deadline deadline):endpoint_(std::move(endpoint)),deadline_(deadline){}
- UserSnapshot ReadUser() const {
-  auto transport=Transport();
+ UserSnapshot read_user() const {
+  auto transport=make_transport();
   ConfigEditorClient<ipc::FrameTransport> client(transport);
-  return client.ReadUser();
+  return client.read_user();
  }
- UserReplaceResult ReplaceUser(const std::string& expected_revision, const UserSettings& values) const {
-  auto transport=Transport();
+ UserReplaceResult replace_user(const std::string& expected_revision, const UserSettings& values) const {
+  auto transport=make_transport();
   ConfigEditorClient<ipc::FrameTransport> client(transport);
-  return client.ReplaceUser(expected_revision,values);
+  return client.replace_user(expected_revision,values);
  }
- Editor WithDeadline(ipc::Deadline deadline) const {
+ Editor with_deadline(ipc::Deadline deadline) const {
   auto scoped=*this;scoped.deadline_=deadline;return scoped;
  }
- Editor WithServerExpectation(std::optional<ipc::ServerExpectation> server) const {auto copy=*this;copy.server_=std::move(server);return copy;}
- Editor WithCancellation(ipc::CancellationToken token) const {
+ Editor with_server_expectation(std::optional<ipc::ServerExpectation> server) const {auto copy=*this;copy.server_=std::move(server);return copy;}
+ Editor with_cancellation(ipc::CancellationToken token) const {
   auto scoped=*this;scoped.cancellation_=std::move(token);return scoped;
  }
 private:
- ipc::FrameTransport Transport() const {
+ ipc::FrameTransport make_transport() const {
   auto transport=deadline_?ipc::FrameTransport(endpoint_,*deadline_,1<<20)
                           :ipc::FrameTransport(endpoint_,2000,1<<20);
-  return transport.WithCancellation(cancellation_).WithServerExpectation(server_);
+  return transport.with_cancellation(cancellation_).with_server_expectation(server_);
  }
  std::string endpoint_;
  std::optional<ipc::Deadline> deadline_;

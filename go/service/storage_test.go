@@ -70,7 +70,7 @@ func TestSelectedCASReaderEditorAndAuthorization(t *testing.T) {
 			t.Fatal("read unselected file")
 		}
 		replacement, e := editor.ReplaceUser(initial.Revision, wire.UserSettings{Store: "selected", Off: map[string]string{}})
-		if e != nil || replacement.Outcome != "applied" {
+		if e != nil || replacement.Outcome != wire.UserReplaceOutcomeApplied {
 			t.Fatal(replacement, e)
 		}
 		revision = replacement.Snapshot.Revision

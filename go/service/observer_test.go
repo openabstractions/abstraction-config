@@ -75,7 +75,7 @@ func TestConfigObserverNativeChangesLatestAndRestart(t *testing.T) {
 		t.Fatal("missing native observer")
 	}
 	first, e := c.ObserveContext(context.Background(), wire.RunOverrides{}, "", 0)
-	if e != nil || first.Outcome != "snapshot" || first.Snapshot.Store != "first" {
+	if e != nil || first.Outcome != wire.ConfigObservationOutcomeSnapshot || first.Snapshot.Store != "first" {
 		t.Fatal(first, e)
 	}
 	type result struct {
@@ -96,7 +96,7 @@ func TestConfigObserverNativeChangesLatestAndRestart(t *testing.T) {
 		}
 		s.Values.Store = value
 		r, e := editor.ReplaceUserContext(context.Background(), s.Revision, s.Values)
-		if e != nil || r.Outcome != "applied" {
+		if e != nil || r.Outcome != wire.UserReplaceOutcomeApplied {
 			t.Fatal(r, e)
 		}
 	}
@@ -105,7 +105,7 @@ func TestConfigObserverNativeChangesLatestAndRestart(t *testing.T) {
 	select {
 	case r := <-done:
 		second = r.v
-		if r.e != nil || second.Outcome != "snapshot" || second.Snapshot.Store != "second" {
+		if r.e != nil || second.Outcome != wire.ConfigObservationOutcomeSnapshot || second.Snapshot.Store != "second" {
 			t.Fatal(second, r.e)
 		}
 	case <-time.After(3 * time.Second):
@@ -114,21 +114,21 @@ func TestConfigObserverNativeChangesLatestAndRestart(t *testing.T) {
 	replace("intermediate")
 	replace("latest")
 	latest, e := c.ObserveContext(context.Background(), wire.RunOverrides{}, second.Cursor, 30000)
-	if e != nil || latest.Outcome != "snapshot" || latest.Snapshot.Store != "latest" {
+	if e != nil || latest.Outcome != wire.ConfigObservationOutcomeSnapshot || latest.Snapshot.Store != "latest" {
 		t.Fatal(latest, e)
 	}
 	unchanged, e := c.ObserveContext(context.Background(), wire.RunOverrides{}, latest.Cursor, 5)
-	if e != nil || unchanged.Outcome != "unchanged" || unchanged.Snapshot != nil {
+	if e != nil || unchanged.Outcome != wire.ConfigObservationOutcomeUnchanged || unchanged.Snapshot != nil {
 		t.Fatal(unchanged, e)
 	}
 	gap, e := c.ObserveContext(context.Background(), wire.RunOverrides{Store: "caller"}, latest.Cursor, 0)
-	if e != nil || gap.Outcome != "gap" {
+	if e != nil || gap.Outcome != wire.ConfigObservationOutcomeGap {
 		t.Fatal(gap, e)
 	}
 	h.Close()
 	_, fresh, _ := observerHost(t, nil)
 	gap, e = fresh.ObserveContext(context.Background(), wire.RunOverrides{}, latest.Cursor, 0)
-	if e != nil || gap.Outcome != "gap" || gap.Snapshot != nil {
+	if e != nil || gap.Outcome != wire.ConfigObservationOutcomeGap || gap.Snapshot != nil {
 		t.Fatal(gap, e)
 	}
 }
@@ -159,7 +159,7 @@ func TestConfigObserverDisconnectCapacityDeadlineShutdown(t *testing.T) {
 	}
 	waitConfigObservers(t, h, 32)
 	full, e := c.ObserveContext(context.Background(), wire.RunOverrides{}, initial.Cursor, 30000)
-	if e != nil || full.Outcome != "unavailable" {
+	if e != nil || full.Outcome != wire.ConfigObservationOutcomeUnavailable {
 		t.Fatal(full, e)
 	}
 	cancel()
@@ -218,7 +218,7 @@ func TestConfigObserverUnsupportedAndInvalid(t *testing.T) {
 		t.Fatal("unsupported advertised")
 	}
 	r, e := c.ObserveContext(context.Background(), wire.RunOverrides{}, "", 0)
-	if e != nil || r.Outcome != "unsupported" {
+	if e != nil || r.Outcome != wire.ConfigObservationOutcomeUnsupported {
 		t.Fatal(r, e)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -290,7 +290,7 @@ func TestConfigObserverSelectedStoreRequiresItsOwnSource(t *testing.T) {
 		runtime.Gosched()
 	}
 	unavailable, e := c.ObserveContext(context.Background(), wire.RunOverrides{}, current.Cursor, 0)
-	if e != nil || unavailable.Outcome != "unavailable" {
+	if e != nil || unavailable.Outcome != wire.ConfigObservationOutcomeUnavailable {
 		t.Fatal(unavailable, e)
 	}
 }

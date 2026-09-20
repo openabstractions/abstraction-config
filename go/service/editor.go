@@ -33,7 +33,21 @@ func (h *Host) EnableEditPolicy(policy EditPolicy) error {
 	return nil
 }
 
-func refusedReplace(outcome string) wire.UserReplaceResult {
+// OmitMachineRung makes reads answer from the user rung and run overrides
+// alone, reading neither the administrator's machine file nor its directory. A
+// runtime isolated from the installation configures it with its own user store.
+// Configure it before Serve.
+func (h *Host) OmitMachineRung() error {
+	h.observation.mu.Lock()
+	defer h.observation.mu.Unlock()
+	if h.observation.serving || h.ctx.Err() != nil {
+		return errors.New("config: omit the machine rung before Serve")
+	}
+	h.withoutMachine = true
+	return nil
+}
+
+func refusedReplace(outcome wire.UserReplaceOutcome) wire.UserReplaceResult {
 	return wire.UserReplaceResult{Outcome: outcome, Snapshot: wire.UserSnapshot{Values: wire.UserSettings{Off: map[string]string{}}}}
 }
 

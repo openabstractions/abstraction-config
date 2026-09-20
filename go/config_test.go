@@ -8,6 +8,16 @@ import (
 	"testing"
 )
 
+// loadFromProcess reads the files with this process's own overrides, the way a
+// provider passes the run overrides it was given.
+func loadFromProcess() Config {
+	values := map[string]string{}
+	for _, name := range EnvVars {
+		values[name] = os.Getenv(name)
+	}
+	return LoadWithOverrides(values)
+}
+
 func TestSaveKeepsTheFormatAndLeavesNoTemporary(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "abstraction", "config.json")
 	if err := Save(path, Config{NASStore: `\\nas\models`, LogSink: "/var/log/a.jsonl"}); err != nil {
@@ -70,7 +80,7 @@ func TestOneVariableDoesNotMakeEveryKeyComeFromTheEnvironment(t *testing.T) {
 	}
 	t.Setenv(EnvVars["store"], "B")
 
-	c := LegacyLoad()
+	c := loadFromProcess()
 	if c.Store != "B" || c.Origin("store") != (Origin{Rung: Environment}) {
 		t.Fatalf("store is %q from %v", c.Store, c.Origin("store"))
 	}

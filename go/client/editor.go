@@ -4,7 +4,6 @@ import (
 	"context"
 	wire "github.com/openabstractions/abstraction-config/go/abstraction/config"
 	"github.com/openabstractions/abstraction-identity/listen"
-	"time"
 )
 
 type UserSettings = wire.UserSettings
@@ -21,7 +20,7 @@ func NewEditor(endpoint string) *Editor {
 
 // NewEditorWithTransport retains the caller's endpoint, server trust and waiting limits.
 func NewEditorWithTransport(transport listen.FrameClient) *Editor {
-	return &Editor{transport: transport.WithDefaults(2*time.Second, 1<<20)}
+	return &Editor{transport: transport.WithDefaults(DefaultTimeout, 1<<20)}
 }
 func (c *Editor) ReadUser() (wire.UserSnapshot, error) {
 	return c.ReadUserContext(context.Background())

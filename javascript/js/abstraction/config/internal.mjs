@@ -4,7 +4,7 @@ const HEX = "0123456789abcdef";
 const ENC = new TextEncoder();
 const SHORT = { 0x22: '\\"', 0x5c: "\\\\", 0x08: "\\b", 0x0c: "\\f", 0x0a: "\\n", 0x0d: "\\r", 0x09: "\\t" };
 
-export class Out {
+class Out {
   constructor() { this.b = []; }
   byte(c) { this.b.push(c); }
   ascii(s) { for (let i = 0; i < s.length; i++) this.b.push(s.charCodeAt(i)); }
@@ -20,11 +20,11 @@ function escByte(out, c) {
 
 // Every integer the definition calls i64 is a BigInt here, because Number
 // rounds above 2^53 and two values in the conformance record are i64 extremes.
-export function num(out, n) { out.ascii(BigInt(n).toString()); }
+function num(out, n) { out.ascii(BigInt(n).toString()); }
 
-export function pad(out, depth) { for (let i = 0; i < depth * 2; i++) out.byte(0x20); }
+function pad(out, depth) { for (let i = 0; i < depth * 2; i++) out.byte(0x20); }
 
-export function strs(out, v, depth) {
+function strs(out, v, depth) {
   if (v.length === 0) { out.ascii("[]"); return; }
   out.ascii("[\n");
   for (let i = 0; i < v.length; i++) {
@@ -39,7 +39,7 @@ export function strs(out, v, depth) {
 
 const isWs = (c) => c === 0x20 || c === 0x09 || c === 0x0a || c === 0x0d;
 
-export function raw(out, s, depth) {
+function raw(out, s, depth) {
   const b = typeof s === "string" ? ENC.encode(s) : s;
   let i = 0;
   while (i < b.length) {
@@ -91,7 +91,7 @@ function byteLess(a, b) {
   return x.length - y.length;
 }
 
-export function rawmap(out, m, depth) {
+function rawmap(out, m, depth) {
   const keys = Object.keys(m).sort(byteLess);
   if (keys.length === 0) { out.ascii("{}"); return; }
   out.ascii("{\n");
@@ -107,13 +107,13 @@ export function rawmap(out, m, depth) {
   out.byte(0x7d);
 }
 
-export function esc(out, s) {
+function esc(out, s) {
   out.byte(0x22);
   for (const c of ENC.encode(s)) escByte(out, c);
   out.byte(0x22);
 }
 
-export function strmap(out, m, depth) {
+function strmap(out, m, depth) {
   const keys = Object.keys(m).sort(byteLess);
   if (keys.length === 0) { out.ascii("{}"); return; }
   out.ascii("{\n");
@@ -129,19 +129,47 @@ export function strmap(out, m, depth) {
   out.byte(0x7d);
 }
 
-export const UserReplaceOutcomeNames = ["applied", "conflict", "forbidden", "unavailable"];
-export const UserReplaceOutcomeUnknown = "refuse";
+export const UserReplaceOutcome = Object.freeze({
+  Applied: "applied",
+  Conflict: "conflict",
+  Forbidden: "forbidden",
+  Unavailable: "unavailable",
+});
 
-export const ConfigObservationOutcomeNames = ["snapshot", "unchanged", "gap", "unavailable", "unsupported", "invalid"];
-export const ConfigObservationOutcomeUnknown = "refuse";
+export const ConfigObservationOutcome = Object.freeze({
+  Snapshot: "snapshot",
+  Unchanged: "unchanged",
+  Gap: "gap",
+  Unavailable: "unavailable",
+  Unsupported: "unsupported",
+  Invalid: "invalid",
+});
 
-export function enc_runoverrides(out, v, depth) {
+export const ServiceErrorCode = Object.freeze({
+  HandlerError: "handler_error",
+  InvalidResult: "invalid_result",
+  UnknownVersion: "unknown_version",
+  UnknownService: "unknown_service",
+  UnknownMethod: "unknown_method",
+  WrongMode: "wrong_mode",
+  StorageUnavailable: "storage_unavailable",
+  CallerUnavailable: "caller_unavailable",
+  IdentityRequired: "identity_required",
+  WrongUser: "wrong_user",
+  InvalidRevision: "invalid_revision",
+});
+
+export const readerErrorCodes = ["storage_unavailable", "caller_unavailable", "identity_required", "wrong_user"];
+
+export const editorErrorCodes = ["invalid_revision", "storage_unavailable", "caller_unavailable", "identity_required", "wrong_user"];
+
+function writeRunOverrides(out, v, depth) {
   out.byte(0x7b);
   out.byte(0x0a);
   pad(out, depth + 1);
   esc(out, "nas_store");
   out.ascii(": ");
-  esc(out, v.nas_store);
+  esc(out, v.nasStore);
   out.byte(0x2c);
   out.byte(0x0a);
   pad(out, depth + 1);
@@ -153,19 +181,19 @@ export function enc_runoverrides(out, v, depth) {
   pad(out, depth + 1);
   esc(out, "log_sink");
   out.ascii(": ");
-  esc(out, v.log_sink);
+  esc(out, v.logSink);
   out.byte(0x2c);
   out.byte(0x0a);
   pad(out, depth + 1);
   esc(out, "log_service");
   out.ascii(": ");
-  esc(out, v.log_service);
+  esc(out, v.logService);
   out.byte(0x0a);
   pad(out, depth);
   out.byte(0x7d);
 }
 
-export function enc_origin(out, v, depth) {
+function writeOrigin(out, v, depth) {
   out.byte(0x7b);
   out.byte(0x0a);
   pad(out, depth + 1);
@@ -183,49 +211,49 @@ export function enc_origin(out, v, depth) {
   out.byte(0x7d);
 }
 
-export function enc_origins(out, v, depth) {
+function writeOrigins(out, v, depth) {
   out.byte(0x7b);
   out.byte(0x0a);
   pad(out, depth + 1);
   esc(out, "nas_store");
   out.ascii(": ");
-  enc_origin(out, v.nas_store, depth + 1);
+  writeOrigin(out, v.nasStore, depth + 1);
   out.byte(0x2c);
   out.byte(0x0a);
   pad(out, depth + 1);
   esc(out, "store");
   out.ascii(": ");
-  enc_origin(out, v.store, depth + 1);
+  writeOrigin(out, v.store, depth + 1);
   out.byte(0x2c);
   out.byte(0x0a);
   pad(out, depth + 1);
   esc(out, "log_sink");
   out.ascii(": ");
-  enc_origin(out, v.log_sink, depth + 1);
+  writeOrigin(out, v.logSink, depth + 1);
   out.byte(0x2c);
   out.byte(0x0a);
   pad(out, depth + 1);
   esc(out, "log_service");
   out.ascii(": ");
-  enc_origin(out, v.log_service, depth + 1);
+  writeOrigin(out, v.logService, depth + 1);
   out.byte(0x2c);
   out.byte(0x0a);
   pad(out, depth + 1);
   esc(out, "off");
   out.ascii(": ");
-  enc_origin(out, v.off, depth + 1);
+  writeOrigin(out, v.off, depth + 1);
   out.byte(0x0a);
   pad(out, depth);
   out.byte(0x7d);
 }
 
-export function enc_snapshot(out, v, depth) {
+function writeSnapshot(out, v, depth) {
   out.byte(0x7b);
   out.byte(0x0a);
   pad(out, depth + 1);
   esc(out, "nas_store");
   out.ascii(": ");
-  esc(out, v.nas_store);
+  esc(out, v.nasStore);
   out.byte(0x2c);
   out.byte(0x0a);
   pad(out, depth + 1);
@@ -237,13 +265,13 @@ export function enc_snapshot(out, v, depth) {
   pad(out, depth + 1);
   esc(out, "log_sink");
   out.ascii(": ");
-  esc(out, v.log_sink);
+  esc(out, v.logSink);
   out.byte(0x2c);
   out.byte(0x0a);
   pad(out, depth + 1);
   esc(out, "log_service");
   out.ascii(": ");
-  esc(out, v.log_service);
+  esc(out, v.logService);
   out.byte(0x2c);
   out.byte(0x0a);
   pad(out, depth + 1);
@@ -255,7 +283,7 @@ export function enc_snapshot(out, v, depth) {
   pad(out, depth + 1);
   esc(out, "origins");
   out.ascii(": ");
-  enc_origins(out, v.origins, depth + 1);
+  writeOrigins(out, v.origins, depth + 1);
   out.byte(0x2c);
   out.byte(0x0a);
   pad(out, depth + 1);
@@ -267,13 +295,13 @@ export function enc_snapshot(out, v, depth) {
   out.byte(0x7d);
 }
 
-export function enc_usersettings(out, v, depth) {
+function writeUserSettings(out, v, depth) {
   out.byte(0x7b);
   out.byte(0x0a);
   pad(out, depth + 1);
   esc(out, "nas_store");
   out.ascii(": ");
-  esc(out, v.nas_store);
+  esc(out, v.nasStore);
   out.byte(0x2c);
   out.byte(0x0a);
   pad(out, depth + 1);
@@ -285,13 +313,13 @@ export function enc_usersettings(out, v, depth) {
   pad(out, depth + 1);
   esc(out, "log_sink");
   out.ascii(": ");
-  esc(out, v.log_sink);
+  esc(out, v.logSink);
   out.byte(0x2c);
   out.byte(0x0a);
   pad(out, depth + 1);
   esc(out, "log_service");
   out.ascii(": ");
-  esc(out, v.log_service);
+  esc(out, v.logService);
   out.byte(0x2c);
   out.byte(0x0a);
   pad(out, depth + 1);
@@ -303,13 +331,13 @@ export function enc_usersettings(out, v, depth) {
   out.byte(0x7d);
 }
 
-export function enc_usersnapshot(out, v, depth) {
+function writeUserSnapshot(out, v, depth) {
   out.byte(0x7b);
   out.byte(0x0a);
   pad(out, depth + 1);
   esc(out, "values");
   out.ascii(": ");
-  enc_usersettings(out, v.values, depth + 1);
+  writeUserSettings(out, v.values, depth + 1);
   out.byte(0x2c);
   out.byte(0x0a);
   pad(out, depth + 1);
@@ -321,7 +349,7 @@ export function enc_usersnapshot(out, v, depth) {
   out.byte(0x7d);
 }
 
-export function enc_userreplaceresult(out, v, depth) {
+function writeUserReplaceResult(out, v, depth) {
     if (typeof v.outcome !== "string") throw new Refusal("wrong_type",0);
     if (v.outcome !== "applied" && v.outcome !== "conflict" && v.outcome !== "forbidden" && v.outcome !== "unavailable") { throw new Refusal("bad_enum",0); }
   out.byte(0x7b);
@@ -335,13 +363,13 @@ export function enc_userreplaceresult(out, v, depth) {
   pad(out, depth + 1);
   esc(out, "snapshot");
   out.ascii(": ");
-  enc_usersnapshot(out, v.snapshot, depth + 1);
+  writeUserSnapshot(out, v.snapshot, depth + 1);
   out.byte(0x0a);
   pad(out, depth);
   out.byte(0x7d);
 }
 
-export function enc_configobservation(out, v, depth) {
+function writeConfigObservation(out, v, depth) {
     if (typeof v.outcome !== "string") throw new Refusal("wrong_type",0);
     if (v.outcome !== "snapshot" && v.outcome !== "unchanged" && v.outcome !== "gap" && v.outcome !== "unavailable" && v.outcome !== "unsupported" && v.outcome !== "invalid") { throw new Refusal("bad_enum",0); }
   out.byte(0x7b);
@@ -362,55 +390,55 @@ export function enc_configobservation(out, v, depth) {
     pad(out, depth + 1);
     esc(out, "snapshot");
     out.ascii(": ");
-    enc_snapshot(out, v.snapshot, depth + 1);
+    writeSnapshot(out, v.snapshot, depth + 1);
   }
   out.byte(0x0a);
   pad(out, depth);
   out.byte(0x7d);
 }
 
-export function enc_oaconfigreaderreadarguments(out, v, depth) {
+function writeOAConfigReaderReadArguments(out, v, depth) {
   out.byte(0x7b);
   out.byte(0x0a);
   pad(out, depth + 1);
   esc(out, "overrides");
   out.ascii(": ");
-  enc_runoverrides(out, v.overrides, depth + 1);
+  writeRunOverrides(out, v.overrides, depth + 1);
   out.byte(0x0a);
   pad(out, depth);
   out.byte(0x7d);
 }
 
-export function enc_oaconfigeditorreaduserarguments(out, v, depth) {
+function writeOAConfigEditorReadUserArguments(out, v, depth) {
   out.byte(0x7b);
   out.byte(0x7d);
 }
 
-export function enc_oaconfigeditorreplaceuserarguments(out, v, depth) {
+function writeOAConfigEditorReplaceUserArguments(out, v, depth) {
   out.byte(0x7b);
   out.byte(0x0a);
   pad(out, depth + 1);
   esc(out, "expected_revision");
   out.ascii(": ");
-  esc(out, v.expected_revision);
+  esc(out, v.expectedRevision);
   out.byte(0x2c);
   out.byte(0x0a);
   pad(out, depth + 1);
   esc(out, "values");
   out.ascii(": ");
-  enc_usersettings(out, v.values, depth + 1);
+  writeUserSettings(out, v.values, depth + 1);
   out.byte(0x0a);
   pad(out, depth);
   out.byte(0x7d);
 }
 
-export function enc_oaconfigobserverobservearguments(out, v, depth) {
+function writeOAConfigObserverObserveArguments(out, v, depth) {
   out.byte(0x7b);
   out.byte(0x0a);
   pad(out, depth + 1);
   esc(out, "overrides");
   out.ascii(": ");
-  enc_runoverrides(out, v.overrides, depth + 1);
+  writeRunOverrides(out, v.overrides, depth + 1);
   out.byte(0x2c);
   out.byte(0x0a);
   pad(out, depth + 1);
@@ -422,13 +450,13 @@ export function enc_oaconfigobserverobservearguments(out, v, depth) {
   pad(out, depth + 1);
   esc(out, "wait_ms");
   out.ascii(": ");
-  num(out, v.wait_ms);
+  num(out, v.waitMs);
   out.byte(0x0a);
   pad(out, depth);
   out.byte(0x7d);
 }
 
-export function enc_oaserviceframe(out, v, depth) {
+function writeOAServiceFrame(out, v, depth) {
   out.byte(0x7b);
   out.byte(0x0a);
   pad(out, depth + 1);
@@ -458,7 +486,7 @@ export function enc_oaserviceframe(out, v, depth) {
   out.byte(0x7d);
 }
 
-export function enc_oaservicereply(out, v, depth) {
+function writeOAServiceReply(out, v, depth) {
   out.byte(0x7b);
   out.byte(0x0a);
   pad(out, depth + 1);
@@ -494,7 +522,7 @@ export function enc_oaservicereply(out, v, depth) {
   out.byte(0x7d);
 }
 
-export function enc_oaserviceerror(out, v, depth) {
+function writeOAServiceError(out, v, depth) {
   out.byte(0x7b);
   out.byte(0x0a);
   pad(out, depth + 1);
@@ -512,49 +540,49 @@ export function enc_oaserviceerror(out, v, depth) {
   out.byte(0x7d);
 }
 
-export function enc_oaconfigreaderreadresult(out, v, depth) {
+function writeOAConfigReaderReadResult(out, v, depth) {
   out.byte(0x7b);
   out.byte(0x0a);
   pad(out, depth + 1);
   esc(out, "value");
   out.ascii(": ");
-  enc_snapshot(out, v.value, depth + 1);
+  writeSnapshot(out, v.value, depth + 1);
   out.byte(0x0a);
   pad(out, depth);
   out.byte(0x7d);
 }
 
-export function enc_oaconfigeditorreaduserresult(out, v, depth) {
+function writeOAConfigEditorReadUserResult(out, v, depth) {
   out.byte(0x7b);
   out.byte(0x0a);
   pad(out, depth + 1);
   esc(out, "value");
   out.ascii(": ");
-  enc_usersnapshot(out, v.value, depth + 1);
+  writeUserSnapshot(out, v.value, depth + 1);
   out.byte(0x0a);
   pad(out, depth);
   out.byte(0x7d);
 }
 
-export function enc_oaconfigeditorreplaceuserresult(out, v, depth) {
+function writeOAConfigEditorReplaceUserResult(out, v, depth) {
   out.byte(0x7b);
   out.byte(0x0a);
   pad(out, depth + 1);
   esc(out, "value");
   out.ascii(": ");
-  enc_userreplaceresult(out, v.value, depth + 1);
+  writeUserReplaceResult(out, v.value, depth + 1);
   out.byte(0x0a);
   pad(out, depth);
   out.byte(0x7d);
 }
 
-export function enc_oaconfigobserverobserveresult(out, v, depth) {
+function writeOAConfigObserverObserveResult(out, v, depth) {
   out.byte(0x7b);
   out.byte(0x0a);
   pad(out, depth + 1);
   esc(out, "value");
   out.ascii(": ");
-  enc_configobservation(out, v.value, depth + 1);
+  writeConfigObservation(out, v.value, depth + 1);
   out.byte(0x0a);
   pad(out, depth);
   out.byte(0x7d);
@@ -562,7 +590,7 @@ export function enc_oaconfigobserverobserveresult(out, v, depth) {
 
 export function encode(v) {
   const out = new Out();
-  enc_snapshot(out, v, 0);
+  writeSnapshot(out, v, 0);
   out.byte(0x0a);
   return out.bytes();
 }
@@ -869,7 +897,7 @@ function strMap(r) {
 
 // Existing per-run overrides. Empty strings do not override file values.
 export function newRunOverrides() {
-  return { nas_store: "", store: "", log_sink: "", log_service: "" };
+  return { nasStore: "", store: "", logSink: "", logService: "" };
 }
 
 // Per-key provenance: machine/user file path, or environment/default with empty
@@ -880,14 +908,14 @@ export function newOrigin() {
 
 // Provenance for every configuration key, including default answers.
 export function newOrigins() {
-  return { nas_store: newOrigin(), store: newOrigin(), log_sink: newOrigin(), log_service: newOrigin(), off: newOrigin() };
+  return { nasStore: newOrigin(), store: newOrigin(), logSink: newOrigin(), logService: newOrigin(), off: newOrigin() };
 }
 
 // Existing provider values and provenance. Empty values mean absence. Stamp
 // follows values rather than provenance; paths are diagnostic configuration
 // data, not permission to access a store.
 export function newSnapshot() {
-  return { nas_store: "", store: "", log_sink: "", log_service: "", off: {}, origins: newOrigins(), stamp: "" };
+  return { nasStore: "", store: "", logSink: "", logService: "", off: {}, origins: newOrigins(), stamp: "" };
 }
 
 // User-rung overrides only. Empty values clear overrides; machine and run
@@ -895,7 +923,7 @@ export function newSnapshot() {
 // selected by the service; path-valued settings grant no provider storage
 // authority.
 export function newUserSettings() {
-  return { nas_store: "", store: "", log_sink: "", log_service: "", off: {} };
+  return { nasStore: "", store: "", logSink: "", logService: "", off: {} };
 }
 
 // Normalized user-rung content and an opaque content revision. A missing file
@@ -925,51 +953,51 @@ export function newConfigObservation() {
   return { outcome: "", cursor: "", snapshot: null };
 }
 
-export function newOAConfigReaderReadArguments() {
+function newOAConfigReaderReadArguments() {
   return { overrides: newRunOverrides() };
 }
 
-export function newOAConfigEditorReadUserArguments() {
+function newOAConfigEditorReadUserArguments() {
   return { };
 }
 
-export function newOAConfigEditorReplaceUserArguments() {
-  return { expected_revision: "", values: newUserSettings() };
+function newOAConfigEditorReplaceUserArguments() {
+  return { expectedRevision: "", values: newUserSettings() };
 }
 
-export function newOAConfigObserverObserveArguments() {
-  return { overrides: newRunOverrides(), cursor: "", wait_ms: 0n };
+function newOAConfigObserverObserveArguments() {
+  return { overrides: newRunOverrides(), cursor: "", waitMs: 0n };
 }
 
-export function newOAServiceFrame() {
+function newOAServiceFrame() {
   return { version: 0, service: "", method: "", arguments: "" };
 }
 
-export function newOAServiceReply() {
+function newOAServiceReply() {
   return { version: 0, service: "", method: "", ok: false, payload: "" };
 }
 
-export function newOAServiceError() {
+function newOAServiceError() {
   return { code: "", message: "" };
 }
 
-export function newOAConfigReaderReadResult() {
+function newOAConfigReaderReadResult() {
   return { value: newSnapshot() };
 }
 
-export function newOAConfigEditorReadUserResult() {
+function newOAConfigEditorReadUserResult() {
   return { value: newUserSnapshot() };
 }
 
-export function newOAConfigEditorReplaceUserResult() {
+function newOAConfigEditorReplaceUserResult() {
   return { value: newUserReplaceResult() };
 }
 
-export function newOAConfigObserverObserveResult() {
+function newOAConfigObserverObserveResult() {
   return { value: newConfigObservation() };
 }
 
-function decode_runoverrides(r) {
+function readRunOverrides(r) {
   if (r.at() !== 0x7b) throw r.refuse("wrong_type");
   r.enter();
   r.pos++;
@@ -988,7 +1016,7 @@ function decode_runoverrides(r) {
       if (key === "nas_store") {
         if (seen & 1) throw r.refuse("duplicate_field");
         seen |= 1;
-        v.nas_store = r.string();
+        v.nasStore = r.string();
       } else if (key === "store") {
         if (seen & 2) throw r.refuse("duplicate_field");
         seen |= 2;
@@ -996,11 +1024,11 @@ function decode_runoverrides(r) {
       } else if (key === "log_sink") {
         if (seen & 4) throw r.refuse("duplicate_field");
         seen |= 4;
-        v.log_sink = r.string();
+        v.logSink = r.string();
       } else if (key === "log_service") {
         if (seen & 8) throw r.refuse("duplicate_field");
         seen |= 8;
-        v.log_service = r.string();
+        v.logService = r.string();
       } else {
         throw r.refuse("unknown_field");
       }
@@ -1016,7 +1044,7 @@ function decode_runoverrides(r) {
   return v;
 }
 
-function decode_origin(r) {
+function readOrigin(r) {
   if (r.at() !== 0x7b) throw r.refuse("wrong_type");
   r.enter();
   r.pos++;
@@ -1055,7 +1083,7 @@ function decode_origin(r) {
   return v;
 }
 
-function decode_origins(r) {
+function readOrigins(r) {
   if (r.at() !== 0x7b) throw r.refuse("wrong_type");
   r.enter();
   r.pos++;
@@ -1074,23 +1102,23 @@ function decode_origins(r) {
       if (key === "nas_store") {
         if (seen & 1) throw r.refuse("duplicate_field");
         seen |= 1;
-        v.nas_store = decode_origin(r);
+        v.nasStore = readOrigin(r);
       } else if (key === "store") {
         if (seen & 2) throw r.refuse("duplicate_field");
         seen |= 2;
-        v.store = decode_origin(r);
+        v.store = readOrigin(r);
       } else if (key === "log_sink") {
         if (seen & 4) throw r.refuse("duplicate_field");
         seen |= 4;
-        v.log_sink = decode_origin(r);
+        v.logSink = readOrigin(r);
       } else if (key === "log_service") {
         if (seen & 8) throw r.refuse("duplicate_field");
         seen |= 8;
-        v.log_service = decode_origin(r);
+        v.logService = readOrigin(r);
       } else if (key === "off") {
         if (seen & 16) throw r.refuse("duplicate_field");
         seen |= 16;
-        v.off = decode_origin(r);
+        v.off = readOrigin(r);
       } else {
         throw r.refuse("unknown_field");
       }
@@ -1106,7 +1134,7 @@ function decode_origins(r) {
   return v;
 }
 
-function decode_snapshot(r) {
+function readSnapshot(r) {
   if (r.at() !== 0x7b) throw r.refuse("wrong_type");
   r.enter();
   r.pos++;
@@ -1125,7 +1153,7 @@ function decode_snapshot(r) {
       if (key === "nas_store") {
         if (seen & 1) throw r.refuse("duplicate_field");
         seen |= 1;
-        v.nas_store = r.string();
+        v.nasStore = r.string();
       } else if (key === "store") {
         if (seen & 2) throw r.refuse("duplicate_field");
         seen |= 2;
@@ -1133,11 +1161,11 @@ function decode_snapshot(r) {
       } else if (key === "log_sink") {
         if (seen & 4) throw r.refuse("duplicate_field");
         seen |= 4;
-        v.log_sink = r.string();
+        v.logSink = r.string();
       } else if (key === "log_service") {
         if (seen & 8) throw r.refuse("duplicate_field");
         seen |= 8;
-        v.log_service = r.string();
+        v.logService = r.string();
       } else if (key === "off") {
         if (seen & 16) throw r.refuse("duplicate_field");
         seen |= 16;
@@ -1145,7 +1173,7 @@ function decode_snapshot(r) {
       } else if (key === "origins") {
         if (seen & 32) throw r.refuse("duplicate_field");
         seen |= 32;
-        v.origins = decode_origins(r);
+        v.origins = readOrigins(r);
       } else if (key === "stamp") {
         if (seen & 64) throw r.refuse("duplicate_field");
         seen |= 64;
@@ -1165,7 +1193,7 @@ function decode_snapshot(r) {
   return v;
 }
 
-function decode_usersettings(r) {
+function readUserSettings(r) {
   if (r.at() !== 0x7b) throw r.refuse("wrong_type");
   r.enter();
   r.pos++;
@@ -1184,7 +1212,7 @@ function decode_usersettings(r) {
       if (key === "nas_store") {
         if (seen & 1) throw r.refuse("duplicate_field");
         seen |= 1;
-        v.nas_store = r.string();
+        v.nasStore = r.string();
       } else if (key === "store") {
         if (seen & 2) throw r.refuse("duplicate_field");
         seen |= 2;
@@ -1192,11 +1220,11 @@ function decode_usersettings(r) {
       } else if (key === "log_sink") {
         if (seen & 4) throw r.refuse("duplicate_field");
         seen |= 4;
-        v.log_sink = r.string();
+        v.logSink = r.string();
       } else if (key === "log_service") {
         if (seen & 8) throw r.refuse("duplicate_field");
         seen |= 8;
-        v.log_service = r.string();
+        v.logService = r.string();
       } else if (key === "off") {
         if (seen & 16) throw r.refuse("duplicate_field");
         seen |= 16;
@@ -1216,7 +1244,7 @@ function decode_usersettings(r) {
   return v;
 }
 
-function decode_usersnapshot(r) {
+function readUserSnapshot(r) {
   if (r.at() !== 0x7b) throw r.refuse("wrong_type");
   r.enter();
   r.pos++;
@@ -1235,7 +1263,7 @@ function decode_usersnapshot(r) {
       if (key === "values") {
         if (seen & 1) throw r.refuse("duplicate_field");
         seen |= 1;
-        v.values = decode_usersettings(r);
+        v.values = readUserSettings(r);
       } else if (key === "revision") {
         if (seen & 2) throw r.refuse("duplicate_field");
         seen |= 2;
@@ -1255,7 +1283,7 @@ function decode_usersnapshot(r) {
   return v;
 }
 
-function decode_userreplaceresult(r) {
+function readUserReplaceResult(r) {
   if (r.at() !== 0x7b) throw r.refuse("wrong_type");
   r.enter();
   r.pos++;
@@ -1278,7 +1306,7 @@ function decode_userreplaceresult(r) {
       } else if (key === "snapshot") {
         if (seen & 2) throw r.refuse("duplicate_field");
         seen |= 2;
-        v.snapshot = decode_usersnapshot(r);
+        v.snapshot = readUserSnapshot(r);
       } else {
         throw r.refuse("unknown_field");
       }
@@ -1295,7 +1323,7 @@ function decode_userreplaceresult(r) {
   return v;
 }
 
-function decode_configobservation(r) {
+function readConfigObservation(r) {
   if (r.at() !== 0x7b) throw r.refuse("wrong_type");
   r.enter();
   r.pos++;
@@ -1322,7 +1350,7 @@ function decode_configobservation(r) {
       } else if (key === "snapshot") {
         if (seen & 4) throw r.refuse("duplicate_field");
         seen |= 4;
-        v.snapshot = decode_snapshot(r);
+        v.snapshot = readSnapshot(r);
       } else {
         throw r.refuse("unknown_field");
       }
@@ -1339,7 +1367,7 @@ function decode_configobservation(r) {
   return v;
 }
 
-function decode_oaconfigreaderreadarguments(r) {
+function readOAConfigReaderReadArguments(r) {
   if (r.at() !== 0x7b) throw r.refuse("wrong_type");
   r.enter();
   r.pos++;
@@ -1358,7 +1386,7 @@ function decode_oaconfigreaderreadarguments(r) {
       if (key === "overrides") {
         if (seen & 1) throw r.refuse("duplicate_field");
         seen |= 1;
-        v.overrides = decode_runoverrides(r);
+        v.overrides = readRunOverrides(r);
       } else {
         throw r.refuse("unknown_field");
       }
@@ -1374,7 +1402,7 @@ function decode_oaconfigreaderreadarguments(r) {
   return v;
 }
 
-function decode_oaconfigeditorreaduserarguments(r) {
+function readOAConfigEditorReadUserArguments(r) {
   if (r.at() !== 0x7b) throw r.refuse("wrong_type");
   r.enter();
   r.pos++;
@@ -1405,7 +1433,7 @@ function decode_oaconfigeditorreaduserarguments(r) {
   return v;
 }
 
-function decode_oaconfigeditorreplaceuserarguments(r) {
+function readOAConfigEditorReplaceUserArguments(r) {
   if (r.at() !== 0x7b) throw r.refuse("wrong_type");
   r.enter();
   r.pos++;
@@ -1424,11 +1452,11 @@ function decode_oaconfigeditorreplaceuserarguments(r) {
       if (key === "expected_revision") {
         if (seen & 1) throw r.refuse("duplicate_field");
         seen |= 1;
-        v.expected_revision = r.string();
+        v.expectedRevision = r.string();
       } else if (key === "values") {
         if (seen & 2) throw r.refuse("duplicate_field");
         seen |= 2;
-        v.values = decode_usersettings(r);
+        v.values = readUserSettings(r);
       } else {
         throw r.refuse("unknown_field");
       }
@@ -1444,7 +1472,7 @@ function decode_oaconfigeditorreplaceuserarguments(r) {
   return v;
 }
 
-function decode_oaconfigobserverobservearguments(r) {
+function readOAConfigObserverObserveArguments(r) {
   if (r.at() !== 0x7b) throw r.refuse("wrong_type");
   r.enter();
   r.pos++;
@@ -1463,7 +1491,7 @@ function decode_oaconfigobserverobservearguments(r) {
       if (key === "overrides") {
         if (seen & 1) throw r.refuse("duplicate_field");
         seen |= 1;
-        v.overrides = decode_runoverrides(r);
+        v.overrides = readRunOverrides(r);
       } else if (key === "cursor") {
         if (seen & 2) throw r.refuse("duplicate_field");
         seen |= 2;
@@ -1471,7 +1499,7 @@ function decode_oaconfigobserverobservearguments(r) {
       } else if (key === "wait_ms") {
         if (seen & 4) throw r.refuse("duplicate_field");
         seen |= 4;
-        v.wait_ms = r.integer(-9223372036854775808n, 9223372036854775807n);
+        v.waitMs = r.integer(-9223372036854775808n, 9223372036854775807n);
       } else {
         throw r.refuse("unknown_field");
       }
@@ -1487,7 +1515,7 @@ function decode_oaconfigobserverobservearguments(r) {
   return v;
 }
 
-function decode_oaserviceframe(r) {
+function readOAServiceFrame(r) {
   if (r.at() !== 0x7b) throw r.refuse("wrong_type");
   r.enter();
   r.pos++;
@@ -1534,7 +1562,7 @@ function decode_oaserviceframe(r) {
   return v;
 }
 
-function decode_oaservicereply(r) {
+function readOAServiceReply(r) {
   if (r.at() !== 0x7b) throw r.refuse("wrong_type");
   r.enter();
   r.pos++;
@@ -1585,7 +1613,7 @@ function decode_oaservicereply(r) {
   return v;
 }
 
-function decode_oaserviceerror(r) {
+function readOAServiceError(r) {
   if (r.at() !== 0x7b) throw r.refuse("wrong_type");
   r.enter();
   r.pos++;
@@ -1624,7 +1652,7 @@ function decode_oaserviceerror(r) {
   return v;
 }
 
-function decode_oaconfigreaderreadresult(r) {
+function readOAConfigReaderReadResult(r) {
   if (r.at() !== 0x7b) throw r.refuse("wrong_type");
   r.enter();
   r.pos++;
@@ -1643,7 +1671,7 @@ function decode_oaconfigreaderreadresult(r) {
       if (key === "value") {
         if (seen & 1) throw r.refuse("duplicate_field");
         seen |= 1;
-        v.value = decode_snapshot(r);
+        v.value = readSnapshot(r);
       } else {
         throw r.refuse("unknown_field");
       }
@@ -1659,7 +1687,7 @@ function decode_oaconfigreaderreadresult(r) {
   return v;
 }
 
-function decode_oaconfigeditorreaduserresult(r) {
+function readOAConfigEditorReadUserResult(r) {
   if (r.at() !== 0x7b) throw r.refuse("wrong_type");
   r.enter();
   r.pos++;
@@ -1678,7 +1706,7 @@ function decode_oaconfigeditorreaduserresult(r) {
       if (key === "value") {
         if (seen & 1) throw r.refuse("duplicate_field");
         seen |= 1;
-        v.value = decode_usersnapshot(r);
+        v.value = readUserSnapshot(r);
       } else {
         throw r.refuse("unknown_field");
       }
@@ -1694,7 +1722,7 @@ function decode_oaconfigeditorreaduserresult(r) {
   return v;
 }
 
-function decode_oaconfigeditorreplaceuserresult(r) {
+function readOAConfigEditorReplaceUserResult(r) {
   if (r.at() !== 0x7b) throw r.refuse("wrong_type");
   r.enter();
   r.pos++;
@@ -1713,7 +1741,7 @@ function decode_oaconfigeditorreplaceuserresult(r) {
       if (key === "value") {
         if (seen & 1) throw r.refuse("duplicate_field");
         seen |= 1;
-        v.value = decode_userreplaceresult(r);
+        v.value = readUserReplaceResult(r);
       } else {
         throw r.refuse("unknown_field");
       }
@@ -1729,7 +1757,7 @@ function decode_oaconfigeditorreplaceuserresult(r) {
   return v;
 }
 
-function decode_oaconfigobserverobserveresult(r) {
+function readOAConfigObserverObserveResult(r) {
   if (r.at() !== 0x7b) throw r.refuse("wrong_type");
   r.enter();
   r.pos++;
@@ -1748,7 +1776,7 @@ function decode_oaconfigobserverobserveresult(r) {
       if (key === "value") {
         if (seen & 1) throw r.refuse("duplicate_field");
         seen |= 1;
-        v.value = decode_configobservation(r);
+        v.value = readConfigObservation(r);
       } else {
         throw r.refuse("unknown_field");
       }
@@ -1767,16 +1795,16 @@ function decode_oaconfigobserverobserveresult(r) {
 export function decode(data) {
   const r = new Reader(data);
   r.ws();
-  const v = decode_snapshot(r);
+  const v = readSnapshot(r);
   r.ws();
   if (r.pos < r.buf.length) throw r.refuse("trailing_bytes");
   return v;
 }
 
 // refusals is in the order two of them are chosen between.
-export const refusals = ["malformed", "bad_string", "number_spelling", "wrong_type", "depth_exceeded", "duplicate_field", "unknown_field", "missing_field", "bad_enum", "trailing_bytes"];
+const refusals = ["malformed", "bad_string", "number_spelling", "wrong_type", "depth_exceeded", "duplicate_field", "unknown_field", "missing_field", "bad_enum", "trailing_bytes"];
 
-export function refusalRank(word) {
+function refusalRank(word) {
   return refusals.indexOf(word);
 }
 
@@ -1833,18 +1861,18 @@ function _serviceCheck(kind, value, depth = 0) {
 }
 
 const _serviceRecords = Object.create(null);
-_serviceRecords["RunOverrides"] = [["nas_store","string","never"],["store","string","never"],["log_sink","string","never"],["log_service","string","never"],];
+_serviceRecords["RunOverrides"] = [["nasStore","string","never"],["store","string","never"],["logSink","string","never"],["logService","string","never"],];
 _serviceRecords["Origin"] = [["rung","string","never"],["path","string","never"],];
-_serviceRecords["Origins"] = [["nas_store","Origin","never"],["store","Origin","never"],["log_sink","Origin","never"],["log_service","Origin","never"],["off","Origin","never"],];
-_serviceRecords["Snapshot"] = [["nas_store","string","never"],["store","string","never"],["log_sink","string","never"],["log_service","string","never"],["off","map<string,string>","never"],["origins","Origins","never"],["stamp","string","never"],];
-_serviceRecords["UserSettings"] = [["nas_store","string","never"],["store","string","never"],["log_sink","string","never"],["log_service","string","never"],["off","map<string,string>","never"],];
+_serviceRecords["Origins"] = [["nasStore","Origin","never"],["store","Origin","never"],["logSink","Origin","never"],["logService","Origin","never"],["off","Origin","never"],];
+_serviceRecords["Snapshot"] = [["nasStore","string","never"],["store","string","never"],["logSink","string","never"],["logService","string","never"],["off","map<string,string>","never"],["origins","Origins","never"],["stamp","string","never"],];
+_serviceRecords["UserSettings"] = [["nasStore","string","never"],["store","string","never"],["logSink","string","never"],["logService","string","never"],["off","map<string,string>","never"],];
 _serviceRecords["UserSnapshot"] = [["values","UserSettings","never"],["revision","string","never"],];
 _serviceRecords["UserReplaceResult"] = [["outcome","string","never"],["snapshot","UserSnapshot","never"],];
 _serviceRecords["ConfigObservation"] = [["outcome","string","never"],["cursor","string","never"],["snapshot","Snapshot","absent"],];
 _serviceRecords["OAConfigReaderReadArguments"] = [["overrides","RunOverrides","never"],];
 _serviceRecords["OAConfigEditorReadUserArguments"] = [];
-_serviceRecords["OAConfigEditorReplaceUserArguments"] = [["expected_revision","string","never"],["values","UserSettings","never"],];
-_serviceRecords["OAConfigObserverObserveArguments"] = [["overrides","RunOverrides","never"],["cursor","string","never"],["wait_ms","i64","never"],];
+_serviceRecords["OAConfigEditorReplaceUserArguments"] = [["expectedRevision","string","never"],["values","UserSettings","never"],];
+_serviceRecords["OAConfigObserverObserveArguments"] = [["overrides","RunOverrides","never"],["cursor","string","never"],["waitMs","i64","never"],];
 _serviceRecords["OAServiceFrame"] = [["version","i32","never"],["service","string","never"],["method","string","never"],["arguments","json","never"],];
 _serviceRecords["OAServiceReply"] = [["version","i32","never"],["service","string","never"],["method","string","never"],["ok","bool","never"],["payload","json","never"],];
 _serviceRecords["OAServiceError"] = [["code","string","never"],["message","string","never"],];
@@ -1854,18 +1882,18 @@ _serviceRecords["OAConfigEditorReplaceUserResult"] = [["value","UserReplaceResul
 _serviceRecords["OAConfigObserverObserveResult"] = [["value","ConfigObservation","never"],];
 
 function _serviceRequest(service, method, argumentsBytes) {
-  return _serviceEncode(enc_oaserviceframe, {
+  return _serviceEncode(writeOAServiceFrame, {
     version:1, service, method, arguments:new TextDecoder("utf-8",{fatal:true}).decode(argumentsBytes)
   },0);
 }
 
 function _serviceResponse(frame, service, method) {
   if (!(frame instanceof Uint8Array)) throw new TypeError("transport frame must be Uint8Array");
-  const reply = _serviceDecode(decode_oaservicereply, frame, 0);
+  const reply = _serviceDecode(readOAServiceReply, frame, 0);
   if (reply.version !== 1) throw new DispatchError("unknown_version");
   if (reply.service !== service || reply.method !== method) throw new DispatchError("mismatched_response");
   if (!reply.ok) {
-    const error = _serviceDecode(decode_oaserviceerror, reply.payload, 1);
+    const error = _serviceDecode(readOAServiceError, reply.payload, 1);
     if (!error.code) throw new DispatchError("invalid_error");
     throw new ServiceError(error.code, error.message);
   }
@@ -1874,61 +1902,65 @@ function _serviceResponse(frame, service, method) {
 
 export class ConfigReaderClient {
   constructor(transport) { this._transport = transport; }
-  async Read(arg0) {
-    const args = newOAConfigReaderReadArguments();
-    args["overrides"] = arg0;
-    _serviceCheck("OAConfigReaderReadArguments", args);
-    const payload = _serviceEncode(enc_oaconfigreaderreadarguments, args, 1);
-    _serviceDecode(decode_oaconfigreaderreadarguments, payload, 1);
-    const request = _serviceRequest("abstraction.config/reader@1", "Read", payload);
-    const reply = _serviceResponse(await this._transport.exchangeFrame(request), "abstraction.config/reader@1", "Read");
-    const result = _serviceDecode(decode_oaconfigreaderreadresult, reply, 1);
-    return result.value;
+
+  async read(overrides) {
+    const _args = newOAConfigReaderReadArguments();
+    _args.overrides = overrides;
+    _serviceCheck("OAConfigReaderReadArguments", _args);
+    const _payload = _serviceEncode(writeOAConfigReaderReadArguments, _args, 1);
+    _serviceDecode(readOAConfigReaderReadArguments, _payload, 1);
+    const _request = _serviceRequest("abstraction.config/reader@1", "Read", _payload);
+    const _reply = _serviceResponse(await this._transport.exchangeFrame(_request), "abstraction.config/reader@1", "Read");
+    const _result = _serviceDecode(readOAConfigReaderReadResult, _reply, 1);
+    return _result.value;
   }
 }
 export const ConfigReaderService = Object.freeze({wireName:"abstraction.config/reader@1",Client:ConfigReaderClient});
 
 export class ConfigEditorClient {
   constructor(transport) { this._transport = transport; }
-  async ReadUser() {
-    const args = newOAConfigEditorReadUserArguments();
-    _serviceCheck("OAConfigEditorReadUserArguments", args);
-    const payload = _serviceEncode(enc_oaconfigeditorreaduserarguments, args, 1);
-    _serviceDecode(decode_oaconfigeditorreaduserarguments, payload, 1);
-    const request = _serviceRequest("abstraction.config/editor@1", "ReadUser", payload);
-    const reply = _serviceResponse(await this._transport.exchangeFrame(request), "abstraction.config/editor@1", "ReadUser");
-    const result = _serviceDecode(decode_oaconfigeditorreaduserresult, reply, 1);
-    return result.value;
+
+  async readUser() {
+    const _args = newOAConfigEditorReadUserArguments();
+    _serviceCheck("OAConfigEditorReadUserArguments", _args);
+    const _payload = _serviceEncode(writeOAConfigEditorReadUserArguments, _args, 1);
+    _serviceDecode(readOAConfigEditorReadUserArguments, _payload, 1);
+    const _request = _serviceRequest("abstraction.config/editor@1", "ReadUser", _payload);
+    const _reply = _serviceResponse(await this._transport.exchangeFrame(_request), "abstraction.config/editor@1", "ReadUser");
+    const _result = _serviceDecode(readOAConfigEditorReadUserResult, _reply, 1);
+    return _result.value;
   }
-  async ReplaceUser(arg0,arg1) {
-    const args = newOAConfigEditorReplaceUserArguments();
-    args["expected_revision"] = arg0;
-    args["values"] = arg1;
-    _serviceCheck("OAConfigEditorReplaceUserArguments", args);
-    const payload = _serviceEncode(enc_oaconfigeditorreplaceuserarguments, args, 1);
-    _serviceDecode(decode_oaconfigeditorreplaceuserarguments, payload, 1);
-    const request = _serviceRequest("abstraction.config/editor@1", "ReplaceUser", payload);
-    const reply = _serviceResponse(await this._transport.exchangeFrame(request), "abstraction.config/editor@1", "ReplaceUser");
-    const result = _serviceDecode(decode_oaconfigeditorreplaceuserresult, reply, 1);
-    return result.value;
+
+  async replaceUser(expectedRevision, values) {
+    const _args = newOAConfigEditorReplaceUserArguments();
+    _args.expectedRevision = expectedRevision;
+    _args.values = values;
+    _serviceCheck("OAConfigEditorReplaceUserArguments", _args);
+    const _payload = _serviceEncode(writeOAConfigEditorReplaceUserArguments, _args, 1);
+    _serviceDecode(readOAConfigEditorReplaceUserArguments, _payload, 1);
+    const _request = _serviceRequest("abstraction.config/editor@1", "ReplaceUser", _payload);
+    const _reply = _serviceResponse(await this._transport.exchangeFrame(_request), "abstraction.config/editor@1", "ReplaceUser");
+    const _result = _serviceDecode(readOAConfigEditorReplaceUserResult, _reply, 1);
+    return _result.value;
   }
 }
 export const ConfigEditorService = Object.freeze({wireName:"abstraction.config/editor@1",Client:ConfigEditorClient});
 
 export class ConfigObserverClient {
   constructor(transport) { this._transport = transport; }
-  async Observe(arg0,arg1,arg2) {
-    const args = newOAConfigObserverObserveArguments();
-    args["overrides"] = arg0;
-    args["cursor"] = arg1;
-    args["wait_ms"] = arg2;
-    _serviceCheck("OAConfigObserverObserveArguments", args);
-    const payload = _serviceEncode(enc_oaconfigobserverobservearguments, args, 1);
-    _serviceDecode(decode_oaconfigobserverobservearguments, payload, 1);
-    const request = _serviceRequest("abstraction.config/observer@1", "Observe", payload);
-    const reply = _serviceResponse(await this._transport.exchangeFrame(request), "abstraction.config/observer@1", "Observe");
-    const result = _serviceDecode(decode_oaconfigobserverobserveresult, reply, 1);
-    return result.value;
+
+  async observe(overrides, cursor, waitMs) {
+    const _args = newOAConfigObserverObserveArguments();
+    _args.overrides = overrides;
+    _args.cursor = cursor;
+    _args.waitMs = waitMs;
+    _serviceCheck("OAConfigObserverObserveArguments", _args);
+    const _payload = _serviceEncode(writeOAConfigObserverObserveArguments, _args, 1);
+    _serviceDecode(readOAConfigObserverObserveArguments, _payload, 1);
+    const _request = _serviceRequest("abstraction.config/observer@1", "Observe", _payload);
+    const _reply = _serviceResponse(await this._transport.exchangeFrame(_request), "abstraction.config/observer@1", "Observe");
+    const _result = _serviceDecode(readOAConfigObserverObserveResult, _reply, 1);
+    return _result.value;
   }
 }
 export const ConfigObserverService = Object.freeze({wireName:"abstraction.config/observer@1",Client:ConfigObserverClient});

@@ -183,7 +183,7 @@ func (d *driver) env(rest string) string {
 }
 
 func (d *driver) load() string {
-	c := d.hearing(config.LegacyLoad)
+	c := d.hearing(load)
 	var out []string
 	for _, key := range config.Keys {
 		o := c.Origin(key)
@@ -202,12 +202,12 @@ func (d *driver) key(name string) string {
 	if name == "" {
 		return "invalid"
 	}
-	c := d.hearing(config.LegacyLoad)
+	c := d.hearing(load)
 	return "ok value=" + value(c, name) + " from=" + c.Origin(name).Rung
 }
 
 func (d *driver) stamp() string {
-	c := d.hearing(config.LegacyLoad)
+	c := d.hearing(load)
 	s := c.Stamp()
 	was, first := d.last, d.first
 	d.last, d.first = s, false
@@ -234,6 +234,16 @@ func (d *driver) said() string {
 // hearing runs one call with stderr redirected into a buffer, so said() can
 // report it without the text itself ever reaching a transcript two languages
 // have to agree on.
+// load reads the provider's files with the overrides this driver's scenario set
+// in its own environment, which is how the corpus reaches the environment rung.
+func load() config.Config {
+	values := map[string]string{}
+	for _, name := range config.EnvVars {
+		values[name] = os.Getenv(name)
+	}
+	return config.LoadWithOverrides(values)
+}
+
 func (d *driver) hearing(f func() config.Config) config.Config {
 	r, w, err := os.Pipe()
 	if err != nil {

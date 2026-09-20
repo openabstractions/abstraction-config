@@ -149,7 +149,7 @@ func observationBinding(overrides wire.RunOverrides) string {
 	return hex.EncodeToString(sum[:])
 }
 func (r *receiver) Observe(overrides wire.RunOverrides, cursor string, waitMS int64) (wire.ConfigObservation, error) {
-	refusal := func(outcome string) (wire.ConfigObservation, error) {
+	refusal := func(outcome wire.ConfigObservationOutcome) (wire.ConfigObservation, error) {
 		return wire.ConfigObservation{Outcome: outcome, Cursor: cursor}, nil
 	}
 	if e := r.authorize(); e != nil {

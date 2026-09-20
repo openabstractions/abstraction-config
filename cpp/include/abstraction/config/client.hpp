@@ -20,22 +20,22 @@ public:
  explicit Client(std::string endpoint=default_endpoint()):endpoint_(std::move(endpoint)){}
  // Explicit operation scope; copies retain the same absolute deadline.
  Client(std::string endpoint, ipc::Deadline deadline):endpoint_(std::move(endpoint)),deadline_(deadline){}
- Snapshot Read()const {
+ Snapshot read()const {
   const auto value=[](const char* name){const char* p=std::getenv(name);return std::string(p?p:"");};
   RunOverrides overrides;
   overrides.nas_store=value("ABSTRACTION_NAS_STORE");overrides.store=value("ABSTRACTION_STORE");
   overrides.log_sink=value("ABSTRACTION_LOG");overrides.log_service=value("ABSTRACTION_LOG_SERVICE");
-  return ReadWithOverrides(overrides);
+  return read_with_overrides(overrides);
  }
- Snapshot ReadWithOverrides(const RunOverrides& overrides)const {
+ Snapshot read_with_overrides(const RunOverrides& overrides)const {
   auto transport=deadline_?ipc::FrameTransport(endpoint_,*deadline_,1<<20)
                           :ipc::FrameTransport(endpoint_,2000,1<<20);
-  transport = transport.WithCancellation(cancellation_).WithServerExpectation(server_);
+  transport = transport.with_cancellation(cancellation_).with_server_expectation(server_);
   ConfigReaderClient<ipc::FrameTransport> client(transport);
-  return client.Read(overrides);
+  return client.read(overrides);
  }
- Client WithServerExpectation(std::optional<ipc::ServerExpectation> server) const {auto copy=*this;copy.server_=std::move(server);return copy;}
- Client WithCancellation(ipc::CancellationToken token) const {
+ Client with_server_expectation(std::optional<ipc::ServerExpectation> server) const {auto copy=*this;copy.server_=std::move(server);return copy;}
+ Client with_cancellation(ipc::CancellationToken token) const {
   auto scoped = *this;
   scoped.cancellation_ = std::move(token);
   return scoped;

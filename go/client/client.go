@@ -12,6 +12,13 @@ import (
 
 const EnvEndpoint = "ABSTRACTION_CONFIG_ENDPOINT"
 
+// DefaultTimeout is how long a reader, editor or observer waits for one call
+// when its transport names no timeout and the call's context no deadline. A
+// service that consults a policy, such as the runtime's rights decision on
+// ReplaceUser, answers within it. A transport timeout or context deadline
+// replaces it.
+const DefaultTimeout = 2 * time.Second
+
 type Snapshot = wire.Snapshot
 type RunOverrides = wire.RunOverrides
 type Client struct{ transport listen.FrameClient }
@@ -29,7 +36,7 @@ func New(endpoint string) *Client {
 
 // NewWithTransport retains the caller's endpoint, server trust and waiting limits.
 func NewWithTransport(transport listen.FrameClient) *Client {
-	return &Client{transport: transport.WithDefaults(2*time.Second, 1<<20)}
+	return &Client{transport: transport.WithDefaults(DefaultTimeout, 1<<20)}
 }
 
 // Read captures this caller's existing run overrides at call time. Empty values

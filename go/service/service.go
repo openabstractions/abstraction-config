@@ -23,12 +23,14 @@ type Host struct {
 	load        func(map[string]string) config.Config
 	userPath    string
 	userStore   casapi.Store
-	editPolicy  EditPolicy
-	ctx         context.Context
-	cancel      context.CancelFunc
-	closeOnce   sync.Once
-	workers     sync.WaitGroup
-	OnError     func(error)
+	// withoutMachine leaves the machine rung unread; see OmitMachineRung.
+	withoutMachine bool
+	editPolicy     EditPolicy
+	ctx            context.Context
+	cancel         context.CancelFunc
+	closeOnce      sync.Once
+	workers        sync.WaitGroup
+	OnError        func(error)
 	// OnStopped is called when admission stops, before active calls drain.
 	// Assign it before Serve. It must return promptly.
 	OnStopped func()
@@ -116,22 +118,12 @@ func (h *Host) Serve(ctx context.Context) error {
 				defer call.Close()
 			}
 			if err == nil {
-				var reply []byte
-				var service string
-				service, err = wire.ServiceName(call.Frame)
 				receiver := &receiver{host: h, call: call, ctx: requestContext}
-				if err == nil {
-					if service == "abstraction.config/editor@1" {
-						dispatcher := wire.ConfigEditorDispatcher{Handler: receiver}
-						reply, err = dispatcher.ExchangeFrame(call.Frame)
-					} else if service == "abstraction.config/observer@1" {
-						dispatcher := wire.ConfigObserverDispatcher{Handler: receiver}
-						reply, err = dispatcher.ExchangeFrame(call.Frame)
-					} else {
-						dispatcher := wire.ConfigReaderDispatcher{Handler: receiver}
-						reply, err = dispatcher.ExchangeFrame(call.Frame)
-					}
-				}
+				var reply []byte
+				reply, err = wire.ServeEndpoint(call.Frame, "openabstractions", "",
+					&wire.ConfigReaderDispatcher{Handler: receiver},
+					&wire.ConfigEditorDispatcher{Handler: receiver},
+					&wire.ConfigObserverDispatcher{Handler: receiver})
 				if err == nil {
 					err = call.Reply(reply)
 				}
@@ -159,7 +151,11 @@ func (r *receiver) Read(overrides wire.RunOverrides) (wire.Snapshot, error) {
 		c = r.host.load(overridesMap)
 	} else {
 		var err error
-		c, err = config.LoadWithUserStore(r.host.userStore, r.host.userPath, overridesMap)
+		machine := config.MachinePath()
+		if r.host.withoutMachine {
+			machine = ""
+		}
+		c, err = config.LoadWithSources(r.host.userStore, r.host.userPath, machine, overridesMap)
 		if err != nil {
 			return wire.Snapshot{}, &wire.ServiceError{Code: "storage_unavailable", Message: "user configuration could not be read"}
 		}

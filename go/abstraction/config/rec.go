@@ -207,33 +207,270 @@ func strmap(out []byte, m map[string]string, depth int) []byte {
 	return append(out, '}')
 }
 
-var UserReplaceOutcomeNames = []string{"applied", "conflict", "forbidden", "unavailable"}
+// UserReplaceOutcome is a closed vocabulary. Its numeric values are private implementation
+// tags; String and ParseUserReplaceOutcome preserve the exact wire words.
+type UserReplaceOutcome uint32
 
-const UserReplaceOutcomeApplied = "applied"
+const (
+	UserReplaceOutcomeApplied     UserReplaceOutcome = 1
+	UserReplaceOutcomeConflict    UserReplaceOutcome = 2
+	UserReplaceOutcomeForbidden   UserReplaceOutcome = 3
+	UserReplaceOutcomeUnavailable UserReplaceOutcome = 4
+)
 
-const UserReplaceOutcomeConflict = "conflict"
+// String returns v's exact wire word, or the empty string for an invalid value.
+func (v UserReplaceOutcome) String() string {
+	word, _ := v.WireName()
+	return word
+}
 
-const UserReplaceOutcomeForbidden = "forbidden"
+// WireName returns v's exact wire word and whether v names a member.
+func (v UserReplaceOutcome) WireName() (string, bool) {
+	switch v {
+	case UserReplaceOutcomeApplied:
+		return "applied", true
+	case UserReplaceOutcomeConflict:
+		return "conflict", true
+	case UserReplaceOutcomeForbidden:
+		return "forbidden", true
+	case UserReplaceOutcomeUnavailable:
+		return "unavailable", true
+	}
+	return "", false
+}
 
-const UserReplaceOutcomeUnavailable = "unavailable"
+// ParseUserReplaceOutcome returns the member named by an exact wire word.
+func ParseUserReplaceOutcome(word string) (UserReplaceOutcome, bool) {
+	switch word {
+	case "applied":
+		return UserReplaceOutcomeApplied, true
+	case "conflict":
+		return UserReplaceOutcomeConflict, true
+	case "forbidden":
+		return UserReplaceOutcomeForbidden, true
+	case "unavailable":
+		return UserReplaceOutcomeUnavailable, true
+	}
+	return UserReplaceOutcome(0), false
+}
 
-const UserReplaceOutcomeUnknown = "refuse"
+// MarshalText preserves the member's exact wire word for standard text users,
+// including JSON object keys. Invalid and zero values are refused.
+func (v UserReplaceOutcome) MarshalText() ([]byte, error) {
+	word, ok := v.WireName()
+	if !ok {
+		return nil, &Refusal{Word: "bad_enum", Offset: 0}
+	}
+	return []byte(word), nil
+}
 
-var ConfigObservationOutcomeNames = []string{"snapshot", "unchanged", "gap", "unavailable", "unsupported", "invalid"}
+// UnmarshalText accepts an exact wire word and refuses unknown text.
+func (v *UserReplaceOutcome) UnmarshalText(text []byte) error {
+	word, ok := ParseUserReplaceOutcome(string(text))
+	if !ok {
+		return &Refusal{Word: "bad_enum", Offset: 0}
+	}
+	*v = word
+	return nil
+}
 
-const ConfigObservationOutcomeSnapshot = "snapshot"
+// MarshalJSON keeps closed vocabularies as JSON strings rather than their
+// private numeric implementation tags.
+func (v UserReplaceOutcome) MarshalJSON() ([]byte, error) {
+	word, ok := v.WireName()
+	if !ok {
+		return nil, &Refusal{Word: "bad_enum", Offset: 0}
+	}
+	return esc(nil, word), nil
+}
 
-const ConfigObservationOutcomeUnchanged = "unchanged"
+// UnmarshalJSON accepts only an exact JSON string member. Numbers, null and
+// unknown strings are refused by the same codec rules as generated records.
+func (v *UserReplaceOutcome) UnmarshalJSON(data []byte) error {
+	r := reader{buf: data}
+	r.ws()
+	word, err := r.str()
+	if err != nil {
+		return err
+	}
+	r.ws()
+	if r.pos != len(r.buf) {
+		return r.refuse("trailing_bytes")
+	}
+	parsed, ok := ParseUserReplaceOutcome(word)
+	if !ok {
+		return r.refuse("bad_enum")
+	}
+	*v = parsed
+	return nil
+}
 
-const ConfigObservationOutcomeGap = "gap"
+// UserReplaceOutcomeValues returns every member of UserReplaceOutcome in declaration order, in a new slice.
+func UserReplaceOutcomeValues() []UserReplaceOutcome {
+	return []UserReplaceOutcome{UserReplaceOutcomeApplied, UserReplaceOutcomeConflict, UserReplaceOutcomeForbidden, UserReplaceOutcomeUnavailable}
+}
 
-const ConfigObservationOutcomeUnavailable = "unavailable"
+// Known reports whether v is a member of UserReplaceOutcome.
+func (v UserReplaceOutcome) Known() bool {
+	_, ok := v.WireName()
+	return ok
+}
 
-const ConfigObservationOutcomeUnsupported = "unsupported"
+// ConfigObservationOutcome is a closed vocabulary. Its numeric values are private implementation
+// tags; String and ParseConfigObservationOutcome preserve the exact wire words.
+type ConfigObservationOutcome uint32
 
-const ConfigObservationOutcomeInvalid = "invalid"
+const (
+	ConfigObservationOutcomeSnapshot    ConfigObservationOutcome = 1
+	ConfigObservationOutcomeUnchanged   ConfigObservationOutcome = 2
+	ConfigObservationOutcomeGap         ConfigObservationOutcome = 3
+	ConfigObservationOutcomeUnavailable ConfigObservationOutcome = 4
+	ConfigObservationOutcomeUnsupported ConfigObservationOutcome = 5
+	ConfigObservationOutcomeInvalid     ConfigObservationOutcome = 6
+)
 
-const ConfigObservationOutcomeUnknown = "refuse"
+// String returns v's exact wire word, or the empty string for an invalid value.
+func (v ConfigObservationOutcome) String() string {
+	word, _ := v.WireName()
+	return word
+}
+
+// WireName returns v's exact wire word and whether v names a member.
+func (v ConfigObservationOutcome) WireName() (string, bool) {
+	switch v {
+	case ConfigObservationOutcomeSnapshot:
+		return "snapshot", true
+	case ConfigObservationOutcomeUnchanged:
+		return "unchanged", true
+	case ConfigObservationOutcomeGap:
+		return "gap", true
+	case ConfigObservationOutcomeUnavailable:
+		return "unavailable", true
+	case ConfigObservationOutcomeUnsupported:
+		return "unsupported", true
+	case ConfigObservationOutcomeInvalid:
+		return "invalid", true
+	}
+	return "", false
+}
+
+// ParseConfigObservationOutcome returns the member named by an exact wire word.
+func ParseConfigObservationOutcome(word string) (ConfigObservationOutcome, bool) {
+	switch word {
+	case "snapshot":
+		return ConfigObservationOutcomeSnapshot, true
+	case "unchanged":
+		return ConfigObservationOutcomeUnchanged, true
+	case "gap":
+		return ConfigObservationOutcomeGap, true
+	case "unavailable":
+		return ConfigObservationOutcomeUnavailable, true
+	case "unsupported":
+		return ConfigObservationOutcomeUnsupported, true
+	case "invalid":
+		return ConfigObservationOutcomeInvalid, true
+	}
+	return ConfigObservationOutcome(0), false
+}
+
+// MarshalText preserves the member's exact wire word for standard text users,
+// including JSON object keys. Invalid and zero values are refused.
+func (v ConfigObservationOutcome) MarshalText() ([]byte, error) {
+	word, ok := v.WireName()
+	if !ok {
+		return nil, &Refusal{Word: "bad_enum", Offset: 0}
+	}
+	return []byte(word), nil
+}
+
+// UnmarshalText accepts an exact wire word and refuses unknown text.
+func (v *ConfigObservationOutcome) UnmarshalText(text []byte) error {
+	word, ok := ParseConfigObservationOutcome(string(text))
+	if !ok {
+		return &Refusal{Word: "bad_enum", Offset: 0}
+	}
+	*v = word
+	return nil
+}
+
+// MarshalJSON keeps closed vocabularies as JSON strings rather than their
+// private numeric implementation tags.
+func (v ConfigObservationOutcome) MarshalJSON() ([]byte, error) {
+	word, ok := v.WireName()
+	if !ok {
+		return nil, &Refusal{Word: "bad_enum", Offset: 0}
+	}
+	return esc(nil, word), nil
+}
+
+// UnmarshalJSON accepts only an exact JSON string member. Numbers, null and
+// unknown strings are refused by the same codec rules as generated records.
+func (v *ConfigObservationOutcome) UnmarshalJSON(data []byte) error {
+	r := reader{buf: data}
+	r.ws()
+	word, err := r.str()
+	if err != nil {
+		return err
+	}
+	r.ws()
+	if r.pos != len(r.buf) {
+		return r.refuse("trailing_bytes")
+	}
+	parsed, ok := ParseConfigObservationOutcome(word)
+	if !ok {
+		return r.refuse("bad_enum")
+	}
+	*v = parsed
+	return nil
+}
+
+// ConfigObservationOutcomeValues returns every member of ConfigObservationOutcome in declaration order, in a new slice.
+func ConfigObservationOutcomeValues() []ConfigObservationOutcome {
+	return []ConfigObservationOutcome{ConfigObservationOutcomeSnapshot, ConfigObservationOutcomeUnchanged, ConfigObservationOutcomeGap, ConfigObservationOutcomeUnavailable, ConfigObservationOutcomeUnsupported, ConfigObservationOutcomeInvalid}
+}
+
+// Known reports whether v is a member of ConfigObservationOutcome.
+func (v ConfigObservationOutcome) Known() bool {
+	_, ok := v.WireName()
+	return ok
+}
+
+// ServiceErrorCode is an open vocabulary: a reader keeps a word it has never heard, so
+// a value may be none of the constants below. ServiceErrorCode(word) and string(v)
+// convert between the raw word and the vocabulary.
+type ServiceErrorCode string
+
+const (
+	ServiceErrorCodeHandlerError       ServiceErrorCode = "handler_error"
+	ServiceErrorCodeInvalidResult      ServiceErrorCode = "invalid_result"
+	ServiceErrorCodeUnknownVersion     ServiceErrorCode = "unknown_version"
+	ServiceErrorCodeUnknownService     ServiceErrorCode = "unknown_service"
+	ServiceErrorCodeUnknownMethod      ServiceErrorCode = "unknown_method"
+	ServiceErrorCodeWrongMode          ServiceErrorCode = "wrong_mode"
+	ServiceErrorCodeStorageUnavailable ServiceErrorCode = "storage_unavailable"
+	ServiceErrorCodeCallerUnavailable  ServiceErrorCode = "caller_unavailable"
+	ServiceErrorCodeIdentityRequired   ServiceErrorCode = "identity_required"
+	ServiceErrorCodeWrongUser          ServiceErrorCode = "wrong_user"
+	ServiceErrorCodeInvalidRevision    ServiceErrorCode = "invalid_revision"
+)
+
+// ServiceErrorCodeValues returns every member of ServiceErrorCode in declaration order, in a new slice.
+func ServiceErrorCodeValues() []ServiceErrorCode {
+	return []ServiceErrorCode{ServiceErrorCodeHandlerError, ServiceErrorCodeInvalidResult, ServiceErrorCodeUnknownVersion, ServiceErrorCodeUnknownService, ServiceErrorCodeUnknownMethod, ServiceErrorCodeWrongMode, ServiceErrorCodeStorageUnavailable, ServiceErrorCodeCallerUnavailable, ServiceErrorCodeIdentityRequired, ServiceErrorCodeWrongUser, ServiceErrorCodeInvalidRevision}
+}
+
+// Known reports whether v is a member of ServiceErrorCode.
+func (v ServiceErrorCode) Known() bool {
+	switch v {
+	case ServiceErrorCodeHandlerError, ServiceErrorCodeInvalidResult, ServiceErrorCodeUnknownVersion, ServiceErrorCodeUnknownService, ServiceErrorCodeUnknownMethod, ServiceErrorCodeWrongMode, ServiceErrorCodeStorageUnavailable, ServiceErrorCodeCallerUnavailable, ServiceErrorCodeIdentityRequired, ServiceErrorCodeWrongUser, ServiceErrorCodeInvalidRevision:
+		return true
+	}
+	return false
+}
+
+var ReaderErrorCodes = []string{"storage_unavailable", "caller_unavailable", "identity_required", "wrong_user"}
+
+var EditorErrorCodes = []string{"invalid_revision", "storage_unavailable", "caller_unavailable", "identity_required", "wrong_user"}
 
 // Existing per-run overrides. Empty strings do not override file values.
 type RunOverrides struct {
@@ -298,7 +535,7 @@ type UserSnapshot struct {
 // may be retried. Both perform no storage access and carry empty values with an
 // empty revision. No outcome merges settings implicitly.
 type UserReplaceResult struct {
-	Outcome  string
+	Outcome  UserReplaceOutcome
 	Snapshot UserSnapshot
 }
 
@@ -310,37 +547,37 @@ type UserReplaceResult struct {
 // changed override binding gives gap and requires an explicit empty-cursor
 // restart.
 type ConfigObservation struct {
-	Outcome  string
+	Outcome  ConfigObservationOutcome
 	Cursor   string
 	Snapshot *Snapshot
 }
 
-type OAConfigReaderReadArguments struct {
+type oaConfigReaderReadArguments struct {
 	Overrides RunOverrides
 }
 
-type OAConfigEditorReadUserArguments struct {
+type oaConfigEditorReadUserArguments struct {
 }
 
-type OAConfigEditorReplaceUserArguments struct {
+type oaConfigEditorReplaceUserArguments struct {
 	ExpectedRevision string
 	Values           UserSettings
 }
 
-type OAConfigObserverObserveArguments struct {
+type oaConfigObserverObserveArguments struct {
 	Overrides RunOverrides
 	Cursor    string
 	WaitMs    int64
 }
 
-type OAServiceFrame struct {
+type oaServiceFrame struct {
 	Version   int32
 	Service   string
 	Method    string
 	Arguments Raw
 }
 
-type OAServiceReply struct {
+type oaServiceReply struct {
 	Version int32
 	Service string
 	Method  string
@@ -348,24 +585,24 @@ type OAServiceReply struct {
 	Payload Raw
 }
 
-type OAServiceError struct {
+type oaServiceError struct {
 	Code    string
 	Message string
 }
 
-type OAConfigReaderReadResult struct {
+type oaConfigReaderReadResult struct {
 	Value Snapshot
 }
 
-type OAConfigEditorReadUserResult struct {
+type oaConfigEditorReadUserResult struct {
 	Value UserSnapshot
 }
 
-type OAConfigEditorReplaceUserResult struct {
+type oaConfigEditorReplaceUserResult struct {
 	Value UserReplaceResult
 }
 
-type OAConfigObserverObserveResult struct {
+type oaConfigObserverObserveResult struct {
 	Value ConfigObservation
 }
 
@@ -556,7 +793,7 @@ func encUserSnapshot(out []byte, v *UserSnapshot, depth int) []byte {
 }
 
 func encUserReplaceResult(out []byte, v *UserReplaceResult, depth int) []byte {
-	if v.Outcome != "applied" && v.Outcome != "conflict" && v.Outcome != "forbidden" && v.Outcome != "unavailable" {
+	if !(v.Outcome).Known() {
 		panic(&Refusal{Word: "bad_enum", Offset: 0})
 	}
 	out = append(out, '{')
@@ -564,7 +801,7 @@ func encUserReplaceResult(out []byte, v *UserReplaceResult, depth int) []byte {
 	out = pad(out, depth+1)
 	out = esc(out, "outcome")
 	out = append(out, ':', ' ')
-	out = esc(out, v.Outcome)
+	out = esc(out, v.Outcome.String())
 	out = append(out, ',')
 	out = append(out, '\n')
 	out = pad(out, depth+1)
@@ -577,7 +814,7 @@ func encUserReplaceResult(out []byte, v *UserReplaceResult, depth int) []byte {
 }
 
 func encConfigObservation(out []byte, v *ConfigObservation, depth int) []byte {
-	if v.Outcome != "snapshot" && v.Outcome != "unchanged" && v.Outcome != "gap" && v.Outcome != "unavailable" && v.Outcome != "unsupported" && v.Outcome != "invalid" {
+	if !(v.Outcome).Known() {
 		panic(&Refusal{Word: "bad_enum", Offset: 0})
 	}
 	out = append(out, '{')
@@ -585,7 +822,7 @@ func encConfigObservation(out []byte, v *ConfigObservation, depth int) []byte {
 	out = pad(out, depth+1)
 	out = esc(out, "outcome")
 	out = append(out, ':', ' ')
-	out = esc(out, v.Outcome)
+	out = esc(out, v.Outcome.String())
 	out = append(out, ',')
 	out = append(out, '\n')
 	out = pad(out, depth+1)
@@ -605,7 +842,7 @@ func encConfigObservation(out []byte, v *ConfigObservation, depth int) []byte {
 	return append(out, '}')
 }
 
-func encOAConfigReaderReadArguments(out []byte, v *OAConfigReaderReadArguments, depth int) []byte {
+func encOAConfigReaderReadArguments(out []byte, v *oaConfigReaderReadArguments, depth int) []byte {
 	out = append(out, '{')
 	out = append(out, '\n')
 	out = pad(out, depth+1)
@@ -617,12 +854,12 @@ func encOAConfigReaderReadArguments(out []byte, v *OAConfigReaderReadArguments, 
 	return append(out, '}')
 }
 
-func encOAConfigEditorReadUserArguments(out []byte, v *OAConfigEditorReadUserArguments, depth int) []byte {
+func encOAConfigEditorReadUserArguments(out []byte, v *oaConfigEditorReadUserArguments, depth int) []byte {
 	out = append(out, '{')
 	return append(out, '}')
 }
 
-func encOAConfigEditorReplaceUserArguments(out []byte, v *OAConfigEditorReplaceUserArguments, depth int) []byte {
+func encOAConfigEditorReplaceUserArguments(out []byte, v *oaConfigEditorReplaceUserArguments, depth int) []byte {
 	out = append(out, '{')
 	out = append(out, '\n')
 	out = pad(out, depth+1)
@@ -640,7 +877,7 @@ func encOAConfigEditorReplaceUserArguments(out []byte, v *OAConfigEditorReplaceU
 	return append(out, '}')
 }
 
-func encOAConfigObserverObserveArguments(out []byte, v *OAConfigObserverObserveArguments, depth int) []byte {
+func encOAConfigObserverObserveArguments(out []byte, v *oaConfigObserverObserveArguments, depth int) []byte {
 	out = append(out, '{')
 	out = append(out, '\n')
 	out = pad(out, depth+1)
@@ -664,7 +901,7 @@ func encOAConfigObserverObserveArguments(out []byte, v *OAConfigObserverObserveA
 	return append(out, '}')
 }
 
-func encOAServiceFrame(out []byte, v *OAServiceFrame, depth int) []byte {
+func encOAServiceFrame(out []byte, v *oaServiceFrame, depth int) []byte {
 	out = append(out, '{')
 	out = append(out, '\n')
 	out = pad(out, depth+1)
@@ -694,7 +931,7 @@ func encOAServiceFrame(out []byte, v *OAServiceFrame, depth int) []byte {
 	return append(out, '}')
 }
 
-func encOAServiceReply(out []byte, v *OAServiceReply, depth int) []byte {
+func encOAServiceReply(out []byte, v *oaServiceReply, depth int) []byte {
 	out = append(out, '{')
 	out = append(out, '\n')
 	out = pad(out, depth+1)
@@ -734,7 +971,7 @@ func encOAServiceReply(out []byte, v *OAServiceReply, depth int) []byte {
 	return append(out, '}')
 }
 
-func encOAServiceError(out []byte, v *OAServiceError, depth int) []byte {
+func encOAServiceError(out []byte, v *oaServiceError, depth int) []byte {
 	out = append(out, '{')
 	out = append(out, '\n')
 	out = pad(out, depth+1)
@@ -752,7 +989,7 @@ func encOAServiceError(out []byte, v *OAServiceError, depth int) []byte {
 	return append(out, '}')
 }
 
-func encOAConfigReaderReadResult(out []byte, v *OAConfigReaderReadResult, depth int) []byte {
+func encOAConfigReaderReadResult(out []byte, v *oaConfigReaderReadResult, depth int) []byte {
 	out = append(out, '{')
 	out = append(out, '\n')
 	out = pad(out, depth+1)
@@ -764,7 +1001,7 @@ func encOAConfigReaderReadResult(out []byte, v *OAConfigReaderReadResult, depth 
 	return append(out, '}')
 }
 
-func encOAConfigEditorReadUserResult(out []byte, v *OAConfigEditorReadUserResult, depth int) []byte {
+func encOAConfigEditorReadUserResult(out []byte, v *oaConfigEditorReadUserResult, depth int) []byte {
 	out = append(out, '{')
 	out = append(out, '\n')
 	out = pad(out, depth+1)
@@ -776,7 +1013,7 @@ func encOAConfigEditorReadUserResult(out []byte, v *OAConfigEditorReadUserResult
 	return append(out, '}')
 }
 
-func encOAConfigEditorReplaceUserResult(out []byte, v *OAConfigEditorReplaceUserResult, depth int) []byte {
+func encOAConfigEditorReplaceUserResult(out []byte, v *oaConfigEditorReplaceUserResult, depth int) []byte {
 	out = append(out, '{')
 	out = append(out, '\n')
 	out = pad(out, depth+1)
@@ -788,7 +1025,7 @@ func encOAConfigEditorReplaceUserResult(out []byte, v *OAConfigEditorReplaceUser
 	return append(out, '}')
 }
 
-func encOAConfigObserverObserveResult(out []byte, v *OAConfigObserverObserveResult, depth int) []byte {
+func encOAConfigObserverObserveResult(out []byte, v *oaConfigObserverObserveResult, depth int) []byte {
 	out = append(out, '{')
 	out = append(out, '\n')
 	out = pad(out, depth+1)
@@ -1902,7 +2139,11 @@ func (r *reader) decodeUserReplaceResult() (*UserReplaceResult, error) {
 				if err != nil {
 					return nil, err
 				}
-				v.Outcome = x
+				word, ok := ParseUserReplaceOutcome(x)
+				if !ok {
+					return nil, r.refuse("bad_enum")
+				}
+				v.Outcome = word
 			case "snapshot":
 				if seen&2 != 0 {
 					return nil, r.refuse("duplicate_field")
@@ -1931,7 +2172,7 @@ func (r *reader) decodeUserReplaceResult() (*UserReplaceResult, error) {
 	if seen&3 != 3 {
 		return nil, r.refuse("missing_field")
 	}
-	if v.Outcome != "applied" && v.Outcome != "conflict" && v.Outcome != "forbidden" && v.Outcome != "unavailable" {
+	if !(v.Outcome).Known() {
 		return nil, r.refuse("bad_enum")
 	}
 	return v, nil
@@ -1974,7 +2215,11 @@ func (r *reader) decodeConfigObservation() (*ConfigObservation, error) {
 				if err != nil {
 					return nil, err
 				}
-				v.Outcome = x
+				word, ok := ParseConfigObservationOutcome(x)
+				if !ok {
+					return nil, r.refuse("bad_enum")
+				}
+				v.Outcome = word
 			case "cursor":
 				if seen&2 != 0 {
 					return nil, r.refuse("duplicate_field")
@@ -2013,13 +2258,13 @@ func (r *reader) decodeConfigObservation() (*ConfigObservation, error) {
 	if seen&3 != 3 {
 		return nil, r.refuse("missing_field")
 	}
-	if v.Outcome != "snapshot" && v.Outcome != "unchanged" && v.Outcome != "gap" && v.Outcome != "unavailable" && v.Outcome != "unsupported" && v.Outcome != "invalid" {
+	if !(v.Outcome).Known() {
 		return nil, r.refuse("bad_enum")
 	}
 	return v, nil
 }
 
-func (r *reader) decodeOAConfigReaderReadArguments() (*OAConfigReaderReadArguments, error) {
+func (r *reader) decodeOAConfigReaderReadArguments() (*oaConfigReaderReadArguments, error) {
 	if r.at() != '{' {
 		return nil, r.refuse("wrong_type")
 	}
@@ -2027,7 +2272,7 @@ func (r *reader) decodeOAConfigReaderReadArguments() (*OAConfigReaderReadArgumen
 		return nil, err
 	}
 	r.pos++
-	v := &OAConfigReaderReadArguments{}
+	v := &oaConfigReaderReadArguments{}
 	var seen uint32
 	r.ws()
 	if r.at() != '}' {
@@ -2078,7 +2323,7 @@ func (r *reader) decodeOAConfigReaderReadArguments() (*OAConfigReaderReadArgumen
 	return v, nil
 }
 
-func (r *reader) decodeOAConfigEditorReadUserArguments() (*OAConfigEditorReadUserArguments, error) {
+func (r *reader) decodeOAConfigEditorReadUserArguments() (*oaConfigEditorReadUserArguments, error) {
 	if r.at() != '{' {
 		return nil, r.refuse("wrong_type")
 	}
@@ -2086,7 +2331,7 @@ func (r *reader) decodeOAConfigEditorReadUserArguments() (*OAConfigEditorReadUse
 		return nil, err
 	}
 	r.pos++
-	v := &OAConfigEditorReadUserArguments{}
+	v := &oaConfigEditorReadUserArguments{}
 	r.ws()
 	if r.at() != '}' {
 		for {
@@ -2114,7 +2359,7 @@ func (r *reader) decodeOAConfigEditorReadUserArguments() (*OAConfigEditorReadUse
 	return v, nil
 }
 
-func (r *reader) decodeOAConfigEditorReplaceUserArguments() (*OAConfigEditorReplaceUserArguments, error) {
+func (r *reader) decodeOAConfigEditorReplaceUserArguments() (*oaConfigEditorReplaceUserArguments, error) {
 	if r.at() != '{' {
 		return nil, r.refuse("wrong_type")
 	}
@@ -2122,7 +2367,7 @@ func (r *reader) decodeOAConfigEditorReplaceUserArguments() (*OAConfigEditorRepl
 		return nil, err
 	}
 	r.pos++
-	v := &OAConfigEditorReplaceUserArguments{}
+	v := &oaConfigEditorReplaceUserArguments{}
 	var seen uint32
 	r.ws()
 	if r.at() != '}' {
@@ -2183,7 +2428,7 @@ func (r *reader) decodeOAConfigEditorReplaceUserArguments() (*OAConfigEditorRepl
 	return v, nil
 }
 
-func (r *reader) decodeOAConfigObserverObserveArguments() (*OAConfigObserverObserveArguments, error) {
+func (r *reader) decodeOAConfigObserverObserveArguments() (*oaConfigObserverObserveArguments, error) {
 	if r.at() != '{' {
 		return nil, r.refuse("wrong_type")
 	}
@@ -2191,7 +2436,7 @@ func (r *reader) decodeOAConfigObserverObserveArguments() (*OAConfigObserverObse
 		return nil, err
 	}
 	r.pos++
-	v := &OAConfigObserverObserveArguments{}
+	v := &oaConfigObserverObserveArguments{}
 	var seen uint32
 	r.ws()
 	if r.at() != '}' {
@@ -2262,7 +2507,7 @@ func (r *reader) decodeOAConfigObserverObserveArguments() (*OAConfigObserverObse
 	return v, nil
 }
 
-func (r *reader) decodeOAServiceFrame() (*OAServiceFrame, error) {
+func (r *reader) decodeOAServiceFrame() (*oaServiceFrame, error) {
 	if r.at() != '{' {
 		return nil, r.refuse("wrong_type")
 	}
@@ -2270,7 +2515,7 @@ func (r *reader) decodeOAServiceFrame() (*OAServiceFrame, error) {
 		return nil, err
 	}
 	r.pos++
-	v := &OAServiceFrame{}
+	v := &oaServiceFrame{}
 	var seen uint32
 	r.ws()
 	if r.at() != '}' {
@@ -2351,7 +2596,7 @@ func (r *reader) decodeOAServiceFrame() (*OAServiceFrame, error) {
 	return v, nil
 }
 
-func (r *reader) decodeOAServiceReply() (*OAServiceReply, error) {
+func (r *reader) decodeOAServiceReply() (*oaServiceReply, error) {
 	if r.at() != '{' {
 		return nil, r.refuse("wrong_type")
 	}
@@ -2359,7 +2604,7 @@ func (r *reader) decodeOAServiceReply() (*OAServiceReply, error) {
 		return nil, err
 	}
 	r.pos++
-	v := &OAServiceReply{}
+	v := &oaServiceReply{}
 	var seen uint32
 	r.ws()
 	if r.at() != '}' {
@@ -2450,7 +2695,7 @@ func (r *reader) decodeOAServiceReply() (*OAServiceReply, error) {
 	return v, nil
 }
 
-func (r *reader) decodeOAServiceError() (*OAServiceError, error) {
+func (r *reader) decodeOAServiceError() (*oaServiceError, error) {
 	if r.at() != '{' {
 		return nil, r.refuse("wrong_type")
 	}
@@ -2458,7 +2703,7 @@ func (r *reader) decodeOAServiceError() (*OAServiceError, error) {
 		return nil, err
 	}
 	r.pos++
-	v := &OAServiceError{}
+	v := &oaServiceError{}
 	var seen uint32
 	r.ws()
 	if r.at() != '}' {
@@ -2519,7 +2764,7 @@ func (r *reader) decodeOAServiceError() (*OAServiceError, error) {
 	return v, nil
 }
 
-func (r *reader) decodeOAConfigReaderReadResult() (*OAConfigReaderReadResult, error) {
+func (r *reader) decodeOAConfigReaderReadResult() (*oaConfigReaderReadResult, error) {
 	if r.at() != '{' {
 		return nil, r.refuse("wrong_type")
 	}
@@ -2527,7 +2772,7 @@ func (r *reader) decodeOAConfigReaderReadResult() (*OAConfigReaderReadResult, er
 		return nil, err
 	}
 	r.pos++
-	v := &OAConfigReaderReadResult{}
+	v := &oaConfigReaderReadResult{}
 	var seen uint32
 	r.ws()
 	if r.at() != '}' {
@@ -2578,7 +2823,7 @@ func (r *reader) decodeOAConfigReaderReadResult() (*OAConfigReaderReadResult, er
 	return v, nil
 }
 
-func (r *reader) decodeOAConfigEditorReadUserResult() (*OAConfigEditorReadUserResult, error) {
+func (r *reader) decodeOAConfigEditorReadUserResult() (*oaConfigEditorReadUserResult, error) {
 	if r.at() != '{' {
 		return nil, r.refuse("wrong_type")
 	}
@@ -2586,7 +2831,7 @@ func (r *reader) decodeOAConfigEditorReadUserResult() (*OAConfigEditorReadUserRe
 		return nil, err
 	}
 	r.pos++
-	v := &OAConfigEditorReadUserResult{}
+	v := &oaConfigEditorReadUserResult{}
 	var seen uint32
 	r.ws()
 	if r.at() != '}' {
@@ -2637,7 +2882,7 @@ func (r *reader) decodeOAConfigEditorReadUserResult() (*OAConfigEditorReadUserRe
 	return v, nil
 }
 
-func (r *reader) decodeOAConfigEditorReplaceUserResult() (*OAConfigEditorReplaceUserResult, error) {
+func (r *reader) decodeOAConfigEditorReplaceUserResult() (*oaConfigEditorReplaceUserResult, error) {
 	if r.at() != '{' {
 		return nil, r.refuse("wrong_type")
 	}
@@ -2645,7 +2890,7 @@ func (r *reader) decodeOAConfigEditorReplaceUserResult() (*OAConfigEditorReplace
 		return nil, err
 	}
 	r.pos++
-	v := &OAConfigEditorReplaceUserResult{}
+	v := &oaConfigEditorReplaceUserResult{}
 	var seen uint32
 	r.ws()
 	if r.at() != '}' {
@@ -2696,7 +2941,7 @@ func (r *reader) decodeOAConfigEditorReplaceUserResult() (*OAConfigEditorReplace
 	return v, nil
 }
 
-func (r *reader) decodeOAConfigObserverObserveResult() (*OAConfigObserverObserveResult, error) {
+func (r *reader) decodeOAConfigObserverObserveResult() (*oaConfigObserverObserveResult, error) {
 	if r.at() != '{' {
 		return nil, r.refuse("wrong_type")
 	}
@@ -2704,7 +2949,7 @@ func (r *reader) decodeOAConfigObserverObserveResult() (*OAConfigObserverObserve
 		return nil, err
 	}
 	r.pos++
-	v := &OAConfigObserverObserveResult{}
+	v := &oaConfigObserverObserveResult{}
 	var seen uint32
 	r.ws()
 	if r.at() != '}' {
@@ -2769,12 +3014,12 @@ func Decode(in []byte) (*Snapshot, error) {
 	return v, nil
 }
 
-// Refusals is in the order two of them are chosen between.
+// refusals is in the order two of them are chosen between.
 
-var Refusals = []string{"malformed", "bad_string", "number_spelling", "wrong_type", "depth_exceeded", "duplicate_field", "unknown_field", "missing_field", "bad_enum", "trailing_bytes"}
+var refusals = []string{"malformed", "bad_string", "number_spelling", "wrong_type", "depth_exceeded", "duplicate_field", "unknown_field", "missing_field", "bad_enum", "trailing_bytes"}
 
-func RefusalRank(word string) int {
-	for i, w := range Refusals {
+func refusalRank(word string) int {
+	for i, w := range refusals {
 		if w == word {
 			return i
 		}
@@ -2783,11 +3028,11 @@ func RefusalRank(word string) int {
 }
 
 // A transport consumes or copies frames before returning. WriteFrame is one-way.
-type FrameWriter interface{ WriteFrame([]byte) error }
+type FrameWriter interface{ WriteFrame(frame []byte) error }
 type DispatchError string
 
 func (e DispatchError) Error() string { return string(e) }
-func servicePayload(frame []byte) (*OAServiceFrame, error) {
+func servicePayload(frame []byte) (*oaServiceFrame, error) {
 	r := &reader{buf: frame}
 	r.ws()
 	v, err := r.decodeOAServiceFrame()
@@ -2816,9 +3061,14 @@ func ServiceName(frame []byte) (string, error) {
 
 // ExchangeFrame returns the response associated with this call. Correlation,
 // serialization and deadlines belong to the transport, not this codec.
-type FrameExchanger interface{ ExchangeFrame([]byte) ([]byte, error) }
+type FrameExchanger interface {
+	ExchangeFrame(frame []byte) ([]byte, error)
+}
+
+// ServiceError is a reply on the error channel. Code is a ServiceErrorCode
+// constant or a word this package has never heard.
 type ServiceError struct {
-	Code    string
+	Code    ServiceErrorCode
 	Message string
 }
 
@@ -2826,7 +3076,7 @@ func (e *ServiceError) Error() string {
 	if e.Message != "" {
 		return e.Message
 	}
-	return e.Code
+	return string(e.Code)
 }
 func serviceResponse(frame []byte, service, method string) (Raw, error) {
 	r := &reader{buf: frame}
@@ -2859,11 +3109,11 @@ func serviceResponse(frame []byte, service, method string) (Raw, error) {
 		if e.Code == "" {
 			return "", DispatchError("invalid_error")
 		}
-		return "", &ServiceError{Code: e.Code, Message: e.Message}
+		return "", &ServiceError{Code: ServiceErrorCode(e.Code), Message: e.Message}
 	}
 	return v.Payload, nil
 }
-func serviceReply(v *OAServiceFrame, payload Raw, err error) (frame []byte, outErr error) {
+func serviceReply(v *oaServiceFrame, payload Raw, err error) (frame []byte, outErr error) {
 	defer func() {
 		if p := recover(); p != nil {
 			if e, ok := p.(*Refusal); ok {
@@ -2874,13 +3124,13 @@ func serviceReply(v *OAServiceFrame, payload Raw, err error) (frame []byte, outE
 			}
 		}
 	}()
-	reply := OAServiceReply{Version: 1, Service: v.Service, Method: v.Method, Ok: err == nil, Payload: payload}
+	reply := oaServiceReply{Version: 1, Service: v.Service, Method: v.Method, Ok: err == nil, Payload: payload}
 	if err != nil {
-		e := OAServiceError{Code: "handler_error", Message: "handler failed"}
+		e := oaServiceError{Code: string(ServiceErrorCodeHandlerError), Message: "handler failed"}
 		switch x := err.(type) {
 		case *ServiceError:
 			if x.Code != "" {
-				e.Code = x.Code
+				e.Code = string(x.Code)
 			}
 			e.Message = x.Message
 		case DispatchError:
@@ -2902,8 +3152,106 @@ func serviceReply(v *OAServiceFrame, payload Raw, err error) (frame []byte, outE
 	return frame, nil
 }
 
+// EndpointContract is abstraction.facade/endpoint@1, which every dispatcher
+// answers beside its own service.
+const EndpointContract = "abstraction.facade/endpoint@1"
+
+// DescribedService is a dispatcher of any generated package, as
+// abstraction.facade/endpoint@1 Describe lists it.
+type DescribedService interface {
+	DescribeService() (contract string, ready bool, why string)
+}
+
+// DescribeEndpoint answers an abstraction.facade/endpoint@1 Describe frame for
+// an endpoint hosting services, in that order. program and version are the
+// provider's own display name and version, never authority. A frame for another
+// service reads unknown_service.
+func DescribeEndpoint(frame []byte, program, version string, services ...DescribedService) ([]byte, error) {
+	v, err := servicePayload(frame)
+	if err != nil {
+		return nil, err
+	}
+	if v.Service != EndpointContract {
+		return serviceReply(v, "", DispatchError("unknown_service"))
+	}
+	if v.Method != "Describe" {
+		return serviceReply(v, "", DispatchError("unknown_method"))
+	}
+	r := &reader{buf: []byte(v.Arguments)}
+	r.ws()
+	empty := false
+	if r.pos < len(r.buf) && r.buf[r.pos] == '{' {
+		r.pos++
+		r.ws()
+		if r.pos < len(r.buf) && r.buf[r.pos] == '}' {
+			r.pos++
+			r.ws()
+			empty = r.pos == len(r.buf)
+		}
+	}
+	if !empty {
+		return serviceReply(v, "", &Refusal{Word: "unknown_field"})
+	}
+	out := append([]byte(nil), "{\"value\":{\"outcome\":\"described\",\"program\":"...)
+	out = esc(out, program)
+	out = append(out, ",\"version\":"...)
+	out = esc(out, version)
+	out = append(out, ",\"services\":["...)
+	for i, service := range services {
+		contract, ready, why := service.DescribeService()
+		readiness := "ready"
+		if !ready {
+			readiness = "not_ready"
+		}
+		if i > 0 {
+			out = append(out, ',')
+		}
+		out = append(out, "{\"contract\":"...)
+		out = esc(out, contract)
+		out = append(out, ",\"readiness\":\""+readiness+"\",\"why\":"...)
+		out = esc(out, why)
+		out = append(out, ",\"guarantees\":[],\"capabilities\":{}}"...)
+	}
+	return serviceReply(v, Raw(append(out, "]}}"...)), nil)
+}
+
+// ServedService is a dispatcher of any generated package that ServeEndpoint
+// routes frames to by its wire name.
+type ServedService interface {
+	DescribedService
+	ServiceContract() string
+}
+
+// ServeEndpoint answers one request-response frame for an endpoint hosting
+// services. A Describe frame lists all of them in the order given; any other
+// frame goes to the service it names. A service that takes only one-way frames
+// reads wrong_mode, and a frame naming none of them reads unknown_service.
+func ServeEndpoint(frame []byte, program, version string, services ...ServedService) ([]byte, error) {
+	v, err := servicePayload(frame)
+	if err != nil {
+		return nil, err
+	}
+	if v.Service == EndpointContract {
+		described := make([]DescribedService, len(services))
+		for i, service := range services {
+			described[i] = service
+		}
+		return DescribeEndpoint(frame, program, version, described...)
+	}
+	for _, service := range services {
+		if service.ServiceContract() != v.Service {
+			continue
+		}
+		if exchanger, ok := service.(interface{ ExchangeFrame([]byte) ([]byte, error) }); ok {
+			return exchanger.ExchangeFrame(frame)
+		}
+		return serviceReply(v, "", DispatchError("wrong_mode"))
+	}
+	return serviceReply(v, "", DispatchError("unknown_service"))
+}
+
 type ConfigReader interface {
-	Read(RunOverrides) (Snapshot, error)
+	Read(overrides RunOverrides) (Snapshot, error)
 }
 type ConfigReaderTransport interface {
 	FrameExchanger
@@ -2916,7 +3264,7 @@ func NewConfigReaderClient(t ConfigReaderTransport) *ConfigReaderClient {
 
 type ConfigReaderDispatcher struct{ Handler ConfigReader }
 
-func (c *ConfigReaderClient) Read(arg0 RunOverrides) (result Snapshot, err error) {
+func (c *ConfigReaderClient) Read(overrides RunOverrides) (result Snapshot, err error) {
 	defer func() {
 		if p := recover(); p != nil {
 			if e, ok := p.(*Refusal); ok {
@@ -2926,8 +3274,8 @@ func (c *ConfigReaderClient) Read(arg0 RunOverrides) (result Snapshot, err error
 			}
 		}
 	}()
-	args := OAConfigReaderReadArguments{Overrides: arg0}
-	v := OAServiceFrame{Version: 1, Service: "abstraction.config/reader@1", Method: "Read", Arguments: Raw(encOAConfigReaderReadArguments(nil, &args, 1))}
+	args := oaConfigReaderReadArguments{Overrides: overrides}
+	v := oaServiceFrame{Version: 1, Service: "abstraction.config/reader@1", Method: "Read", Arguments: Raw(encOAConfigReaderReadArguments(nil, &args, 1))}
 	frame := encOAServiceFrame(nil, &v, 0)
 	if _, err = servicePayload(frame); err != nil {
 		return
@@ -2944,7 +3292,7 @@ func (c *ConfigReaderClient) Read(arg0 RunOverrides) (result Snapshot, err error
 	}
 	r := &reader{buf: []byte(payload), depth: 1}
 	r.ws()
-	var decoded *OAConfigReaderReadResult
+	var decoded *oaConfigReaderReadResult
 	decoded, err = r.decodeOAConfigReaderReadResult()
 	if err != nil {
 		return
@@ -2958,6 +3306,21 @@ func (c *ConfigReaderClient) Read(arg0 RunOverrides) (result Snapshot, err error
 	result = decoded.Value
 	return
 }
+
+// DescribeService is this dispatcher's service as abstraction.facade/endpoint@1 Describe lists it:
+// ready unless its handler implements Ready() (bool, string) and reports otherwise.
+func (d *ConfigReaderDispatcher) DescribeService() (contract string, ready bool, why string) {
+	if h, ok := d.Handler.(interface{ Ready() (bool, string) }); ok {
+		if ready, why = h.Ready(); ready {
+			why = ""
+		}
+		return "abstraction.config/reader@1", ready, why
+	}
+	return "abstraction.config/reader@1", true, ""
+}
+
+// ServiceContract is the wire name ServeEndpoint routes this dispatcher's frames by.
+func (d *ConfigReaderDispatcher) ServiceContract() string { return "abstraction.config/reader@1" }
 func (d *ConfigReaderDispatcher) WriteFrame(frame []byte) error {
 	v, err := servicePayload(frame)
 	if err != nil {
@@ -2977,6 +3340,9 @@ func (d *ConfigReaderDispatcher) ExchangeFrame(frame []byte) ([]byte, error) {
 	v, err := servicePayload(frame)
 	if err != nil {
 		return nil, err
+	}
+	if v.Service == EndpointContract {
+		return DescribeEndpoint(frame, "", "", d)
 	}
 	if v.Service != "abstraction.config/reader@1" {
 		return serviceReply(v, "", DispatchError("unknown_service"))
@@ -2999,14 +3365,14 @@ func (d *ConfigReaderDispatcher) ExchangeFrame(frame []byte) ([]byte, error) {
 		return serviceReply(v, "", DispatchError("unknown_method"))
 	}
 }
-func (d *ConfigReaderDispatcher) invokeRead(args *OAConfigReaderReadArguments) (payload Raw, err error) {
+func (d *ConfigReaderDispatcher) invokeRead(args *oaConfigReaderReadArguments) (payload Raw, err error) {
 	defer func() {
 		if p := recover(); p != nil {
 			payload = ""
 			if _, ok := p.(*Refusal); ok {
-				err = &ServiceError{Code: "invalid_result"}
+				err = &ServiceError{Code: ServiceErrorCodeInvalidResult}
 			} else {
-				err = &ServiceError{Code: "handler_error", Message: "handler failed"}
+				err = &ServiceError{Code: ServiceErrorCodeHandlerError, Message: "handler failed"}
 			}
 		}
 	}()
@@ -3015,26 +3381,26 @@ func (d *ConfigReaderDispatcher) invokeRead(args *OAConfigReaderReadArguments) (
 	if err != nil {
 		return
 	}
-	value := OAConfigReaderReadResult{Value: result}
+	value := oaConfigReaderReadResult{Value: result}
 	payload = Raw(encOAConfigReaderReadResult(nil, &value, 1))
 	r := &reader{buf: []byte(payload), depth: 1}
 	r.ws()
 	if _, e := r.decodeOAConfigReaderReadResult(); e != nil {
 		payload = ""
-		err = &ServiceError{Code: "invalid_result"}
+		err = &ServiceError{Code: ServiceErrorCodeInvalidResult}
 		return
 	}
 	r.ws()
 	if r.pos != len(r.buf) {
 		payload = ""
-		err = &ServiceError{Code: "invalid_result"}
+		err = &ServiceError{Code: ServiceErrorCodeInvalidResult}
 	}
 	return
 }
 
 type ConfigEditor interface {
 	ReadUser() (UserSnapshot, error)
-	ReplaceUser(string, UserSettings) (UserReplaceResult, error)
+	ReplaceUser(expectedRevision string, values UserSettings) (UserReplaceResult, error)
 }
 type ConfigEditorTransport interface {
 	FrameExchanger
@@ -3057,8 +3423,8 @@ func (c *ConfigEditorClient) ReadUser() (result UserSnapshot, err error) {
 			}
 		}
 	}()
-	args := OAConfigEditorReadUserArguments{}
-	v := OAServiceFrame{Version: 1, Service: "abstraction.config/editor@1", Method: "ReadUser", Arguments: Raw(encOAConfigEditorReadUserArguments(nil, &args, 1))}
+	args := oaConfigEditorReadUserArguments{}
+	v := oaServiceFrame{Version: 1, Service: "abstraction.config/editor@1", Method: "ReadUser", Arguments: Raw(encOAConfigEditorReadUserArguments(nil, &args, 1))}
 	frame := encOAServiceFrame(nil, &v, 0)
 	if _, err = servicePayload(frame); err != nil {
 		return
@@ -3075,7 +3441,7 @@ func (c *ConfigEditorClient) ReadUser() (result UserSnapshot, err error) {
 	}
 	r := &reader{buf: []byte(payload), depth: 1}
 	r.ws()
-	var decoded *OAConfigEditorReadUserResult
+	var decoded *oaConfigEditorReadUserResult
 	decoded, err = r.decodeOAConfigEditorReadUserResult()
 	if err != nil {
 		return
@@ -3089,7 +3455,7 @@ func (c *ConfigEditorClient) ReadUser() (result UserSnapshot, err error) {
 	result = decoded.Value
 	return
 }
-func (c *ConfigEditorClient) ReplaceUser(arg0 string, arg1 UserSettings) (result UserReplaceResult, err error) {
+func (c *ConfigEditorClient) ReplaceUser(expectedRevision string, values UserSettings) (result UserReplaceResult, err error) {
 	defer func() {
 		if p := recover(); p != nil {
 			if e, ok := p.(*Refusal); ok {
@@ -3099,8 +3465,8 @@ func (c *ConfigEditorClient) ReplaceUser(arg0 string, arg1 UserSettings) (result
 			}
 		}
 	}()
-	args := OAConfigEditorReplaceUserArguments{ExpectedRevision: arg0, Values: arg1}
-	v := OAServiceFrame{Version: 1, Service: "abstraction.config/editor@1", Method: "ReplaceUser", Arguments: Raw(encOAConfigEditorReplaceUserArguments(nil, &args, 1))}
+	args := oaConfigEditorReplaceUserArguments{ExpectedRevision: expectedRevision, Values: values}
+	v := oaServiceFrame{Version: 1, Service: "abstraction.config/editor@1", Method: "ReplaceUser", Arguments: Raw(encOAConfigEditorReplaceUserArguments(nil, &args, 1))}
 	frame := encOAServiceFrame(nil, &v, 0)
 	if _, err = servicePayload(frame); err != nil {
 		return
@@ -3117,7 +3483,7 @@ func (c *ConfigEditorClient) ReplaceUser(arg0 string, arg1 UserSettings) (result
 	}
 	r := &reader{buf: []byte(payload), depth: 1}
 	r.ws()
-	var decoded *OAConfigEditorReplaceUserResult
+	var decoded *oaConfigEditorReplaceUserResult
 	decoded, err = r.decodeOAConfigEditorReplaceUserResult()
 	if err != nil {
 		return
@@ -3131,6 +3497,21 @@ func (c *ConfigEditorClient) ReplaceUser(arg0 string, arg1 UserSettings) (result
 	result = decoded.Value
 	return
 }
+
+// DescribeService is this dispatcher's service as abstraction.facade/endpoint@1 Describe lists it:
+// ready unless its handler implements Ready() (bool, string) and reports otherwise.
+func (d *ConfigEditorDispatcher) DescribeService() (contract string, ready bool, why string) {
+	if h, ok := d.Handler.(interface{ Ready() (bool, string) }); ok {
+		if ready, why = h.Ready(); ready {
+			why = ""
+		}
+		return "abstraction.config/editor@1", ready, why
+	}
+	return "abstraction.config/editor@1", true, ""
+}
+
+// ServiceContract is the wire name ServeEndpoint routes this dispatcher's frames by.
+func (d *ConfigEditorDispatcher) ServiceContract() string { return "abstraction.config/editor@1" }
 func (d *ConfigEditorDispatcher) WriteFrame(frame []byte) error {
 	v, err := servicePayload(frame)
 	if err != nil {
@@ -3152,6 +3533,9 @@ func (d *ConfigEditorDispatcher) ExchangeFrame(frame []byte) ([]byte, error) {
 	v, err := servicePayload(frame)
 	if err != nil {
 		return nil, err
+	}
+	if v.Service == EndpointContract {
+		return DescribeEndpoint(frame, "", "", d)
 	}
 	if v.Service != "abstraction.config/editor@1" {
 		return serviceReply(v, "", DispatchError("unknown_service"))
@@ -3187,14 +3571,14 @@ func (d *ConfigEditorDispatcher) ExchangeFrame(frame []byte) ([]byte, error) {
 		return serviceReply(v, "", DispatchError("unknown_method"))
 	}
 }
-func (d *ConfigEditorDispatcher) invokeReadUser(args *OAConfigEditorReadUserArguments) (payload Raw, err error) {
+func (d *ConfigEditorDispatcher) invokeReadUser(args *oaConfigEditorReadUserArguments) (payload Raw, err error) {
 	defer func() {
 		if p := recover(); p != nil {
 			payload = ""
 			if _, ok := p.(*Refusal); ok {
-				err = &ServiceError{Code: "invalid_result"}
+				err = &ServiceError{Code: ServiceErrorCodeInvalidResult}
 			} else {
-				err = &ServiceError{Code: "handler_error", Message: "handler failed"}
+				err = &ServiceError{Code: ServiceErrorCodeHandlerError, Message: "handler failed"}
 			}
 		}
 	}()
@@ -3203,30 +3587,30 @@ func (d *ConfigEditorDispatcher) invokeReadUser(args *OAConfigEditorReadUserArgu
 	if err != nil {
 		return
 	}
-	value := OAConfigEditorReadUserResult{Value: result}
+	value := oaConfigEditorReadUserResult{Value: result}
 	payload = Raw(encOAConfigEditorReadUserResult(nil, &value, 1))
 	r := &reader{buf: []byte(payload), depth: 1}
 	r.ws()
 	if _, e := r.decodeOAConfigEditorReadUserResult(); e != nil {
 		payload = ""
-		err = &ServiceError{Code: "invalid_result"}
+		err = &ServiceError{Code: ServiceErrorCodeInvalidResult}
 		return
 	}
 	r.ws()
 	if r.pos != len(r.buf) {
 		payload = ""
-		err = &ServiceError{Code: "invalid_result"}
+		err = &ServiceError{Code: ServiceErrorCodeInvalidResult}
 	}
 	return
 }
-func (d *ConfigEditorDispatcher) invokeReplaceUser(args *OAConfigEditorReplaceUserArguments) (payload Raw, err error) {
+func (d *ConfigEditorDispatcher) invokeReplaceUser(args *oaConfigEditorReplaceUserArguments) (payload Raw, err error) {
 	defer func() {
 		if p := recover(); p != nil {
 			payload = ""
 			if _, ok := p.(*Refusal); ok {
-				err = &ServiceError{Code: "invalid_result"}
+				err = &ServiceError{Code: ServiceErrorCodeInvalidResult}
 			} else {
-				err = &ServiceError{Code: "handler_error", Message: "handler failed"}
+				err = &ServiceError{Code: ServiceErrorCodeHandlerError, Message: "handler failed"}
 			}
 		}
 	}()
@@ -3235,25 +3619,25 @@ func (d *ConfigEditorDispatcher) invokeReplaceUser(args *OAConfigEditorReplaceUs
 	if err != nil {
 		return
 	}
-	value := OAConfigEditorReplaceUserResult{Value: result}
+	value := oaConfigEditorReplaceUserResult{Value: result}
 	payload = Raw(encOAConfigEditorReplaceUserResult(nil, &value, 1))
 	r := &reader{buf: []byte(payload), depth: 1}
 	r.ws()
 	if _, e := r.decodeOAConfigEditorReplaceUserResult(); e != nil {
 		payload = ""
-		err = &ServiceError{Code: "invalid_result"}
+		err = &ServiceError{Code: ServiceErrorCodeInvalidResult}
 		return
 	}
 	r.ws()
 	if r.pos != len(r.buf) {
 		payload = ""
-		err = &ServiceError{Code: "invalid_result"}
+		err = &ServiceError{Code: ServiceErrorCodeInvalidResult}
 	}
 	return
 }
 
 type ConfigObserver interface {
-	Observe(RunOverrides, string, int64) (ConfigObservation, error)
+	Observe(overrides RunOverrides, cursor string, waitMs int64) (ConfigObservation, error)
 }
 type ConfigObserverTransport interface {
 	FrameExchanger
@@ -3266,7 +3650,7 @@ func NewConfigObserverClient(t ConfigObserverTransport) *ConfigObserverClient {
 
 type ConfigObserverDispatcher struct{ Handler ConfigObserver }
 
-func (c *ConfigObserverClient) Observe(arg0 RunOverrides, arg1 string, arg2 int64) (result ConfigObservation, err error) {
+func (c *ConfigObserverClient) Observe(overrides RunOverrides, cursor string, waitMs int64) (result ConfigObservation, err error) {
 	defer func() {
 		if p := recover(); p != nil {
 			if e, ok := p.(*Refusal); ok {
@@ -3276,8 +3660,8 @@ func (c *ConfigObserverClient) Observe(arg0 RunOverrides, arg1 string, arg2 int6
 			}
 		}
 	}()
-	args := OAConfigObserverObserveArguments{Overrides: arg0, Cursor: arg1, WaitMs: arg2}
-	v := OAServiceFrame{Version: 1, Service: "abstraction.config/observer@1", Method: "Observe", Arguments: Raw(encOAConfigObserverObserveArguments(nil, &args, 1))}
+	args := oaConfigObserverObserveArguments{Overrides: overrides, Cursor: cursor, WaitMs: waitMs}
+	v := oaServiceFrame{Version: 1, Service: "abstraction.config/observer@1", Method: "Observe", Arguments: Raw(encOAConfigObserverObserveArguments(nil, &args, 1))}
 	frame := encOAServiceFrame(nil, &v, 0)
 	if _, err = servicePayload(frame); err != nil {
 		return
@@ -3294,7 +3678,7 @@ func (c *ConfigObserverClient) Observe(arg0 RunOverrides, arg1 string, arg2 int6
 	}
 	r := &reader{buf: []byte(payload), depth: 1}
 	r.ws()
-	var decoded *OAConfigObserverObserveResult
+	var decoded *oaConfigObserverObserveResult
 	decoded, err = r.decodeOAConfigObserverObserveResult()
 	if err != nil {
 		return
@@ -3308,6 +3692,21 @@ func (c *ConfigObserverClient) Observe(arg0 RunOverrides, arg1 string, arg2 int6
 	result = decoded.Value
 	return
 }
+
+// DescribeService is this dispatcher's service as abstraction.facade/endpoint@1 Describe lists it:
+// ready unless its handler implements Ready() (bool, string) and reports otherwise.
+func (d *ConfigObserverDispatcher) DescribeService() (contract string, ready bool, why string) {
+	if h, ok := d.Handler.(interface{ Ready() (bool, string) }); ok {
+		if ready, why = h.Ready(); ready {
+			why = ""
+		}
+		return "abstraction.config/observer@1", ready, why
+	}
+	return "abstraction.config/observer@1", true, ""
+}
+
+// ServiceContract is the wire name ServeEndpoint routes this dispatcher's frames by.
+func (d *ConfigObserverDispatcher) ServiceContract() string { return "abstraction.config/observer@1" }
 func (d *ConfigObserverDispatcher) WriteFrame(frame []byte) error {
 	v, err := servicePayload(frame)
 	if err != nil {
@@ -3327,6 +3726,9 @@ func (d *ConfigObserverDispatcher) ExchangeFrame(frame []byte) ([]byte, error) {
 	v, err := servicePayload(frame)
 	if err != nil {
 		return nil, err
+	}
+	if v.Service == EndpointContract {
+		return DescribeEndpoint(frame, "", "", d)
 	}
 	if v.Service != "abstraction.config/observer@1" {
 		return serviceReply(v, "", DispatchError("unknown_service"))
@@ -3349,14 +3751,14 @@ func (d *ConfigObserverDispatcher) ExchangeFrame(frame []byte) ([]byte, error) {
 		return serviceReply(v, "", DispatchError("unknown_method"))
 	}
 }
-func (d *ConfigObserverDispatcher) invokeObserve(args *OAConfigObserverObserveArguments) (payload Raw, err error) {
+func (d *ConfigObserverDispatcher) invokeObserve(args *oaConfigObserverObserveArguments) (payload Raw, err error) {
 	defer func() {
 		if p := recover(); p != nil {
 			payload = ""
 			if _, ok := p.(*Refusal); ok {
-				err = &ServiceError{Code: "invalid_result"}
+				err = &ServiceError{Code: ServiceErrorCodeInvalidResult}
 			} else {
-				err = &ServiceError{Code: "handler_error", Message: "handler failed"}
+				err = &ServiceError{Code: ServiceErrorCodeHandlerError, Message: "handler failed"}
 			}
 		}
 	}()
@@ -3365,19 +3767,19 @@ func (d *ConfigObserverDispatcher) invokeObserve(args *OAConfigObserverObserveAr
 	if err != nil {
 		return
 	}
-	value := OAConfigObserverObserveResult{Value: result}
+	value := oaConfigObserverObserveResult{Value: result}
 	payload = Raw(encOAConfigObserverObserveResult(nil, &value, 1))
 	r := &reader{buf: []byte(payload), depth: 1}
 	r.ws()
 	if _, e := r.decodeOAConfigObserverObserveResult(); e != nil {
 		payload = ""
-		err = &ServiceError{Code: "invalid_result"}
+		err = &ServiceError{Code: ServiceErrorCodeInvalidResult}
 		return
 	}
 	r.ws()
 	if r.pos != len(r.buf) {
 		payload = ""
-		err = &ServiceError{Code: "invalid_result"}
+		err = &ServiceError{Code: ServiceErrorCodeInvalidResult}
 	}
 	return
 }

@@ -7,16 +7,16 @@ specified in the facade Python README.
 
 ```python
 from abstraction.facade.client import Machine
-from abstraction.config.rec import RunOverrides
+from abstraction.config import RunOverrides
 
 machine = Machine(timeout=2)
 reader = machine.resolve_config(scope="local")
-snapshot = reader.Read(RunOverrides())
+snapshot = reader.read(RunOverrides())
 print(snapshot.store, snapshot.origins.store.rung)
 editor = machine.resolve_config_editor(scope="local")
-user = editor.ReadUser()
+user = editor.read_user()
 user.values.log_sink = "configured-provider-setting"
-replacement = editor.ReplaceUser(user.revision, user.values)
+replacement = editor.replace_user(user.revision, user.values)
 if replacement.outcome == "conflict":
     print("Settings changed; read and edit the current snapshot")
 ```

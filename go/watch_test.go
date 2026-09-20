@@ -32,6 +32,39 @@ func own(t *testing.T) string {
 	return path
 }
 
+// attach subscribes to invalidations the way the config service does.
+func attach(t *testing.T) *InvalidationSubscription {
+	t.Helper()
+	s, err := WatchInvalidations()
+	if err != nil {
+		t.Fatalf("native watcher unavailable: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+	return s
+}
+
+// expect waits for invalidations until a reread of the files, with no process
+// overrides, holds want. Signals coalesce, so one signal may cover several
+// writes and a write may produce several signals.
+func expect(t *testing.T, s *InvalidationSubscription, want func(Config) bool, what string) {
+	t.Helper()
+	deadline := time.After(10 * time.Second)
+	for {
+		select {
+		case <-s.Changes():
+			if want(LoadWithOverrides(nil)) {
+				return
+			}
+		case <-deadline:
+			t.Fatalf("no invalidation led to %s; last read %+v", what, LoadWithOverrides(nil))
+		}
+	}
+}
+
+func storeIs(value string) func(Config) bool {
+	return func(c Config) bool { return c.Store == value }
+}
+
 func TestExistingFileEditsSurviveReplacementAndDeletion(t *testing.T) {
 	path := own(t)
 	write := func(at, value string) {
@@ -43,140 +76,71 @@ func TestExistingFileEditsSurviveReplacementAndDeletion(t *testing.T) {
 	// Seed before subscribing: directory-only kqueue watches cannot detect the
 	// following in-place write to an already-existing inode.
 	write(path, "initial")
-	s, ch := attach(t)
-	if notifier != "" && !strings.HasPrefix(s.How(), notifier) {
-		t.Fatalf("native watcher unavailable: %s", s.How())
-	}
-	expect := func(value string) {
-		t.Helper()
-		if got := told(t, s, ch).Store; got != value {
-			t.Fatalf("got %q, want %q via %s", got, value, s.How())
-		}
-	}
+	s := attach(t)
 	write(path, "in-place")
-	expect("in-place")
+	expect(t, s, storeIs("in-place"), "the in-place edit")
 	// The replacement must be watched by its new inode, not the old handle.
 	replacement := path + ".new"
 	write(replacement, "replacement")
 	if err := os.Rename(replacement, path); err != nil {
 		t.Fatal(err)
 	}
-	expect("replacement")
+	expect(t, s, storeIs("replacement"), "the replacement")
 	write(path, "replacement-edited")
-	expect("replacement-edited")
+	expect(t, s, storeIs("replacement-edited"), "the edited replacement")
 	if err := os.Remove(path); err != nil {
 		t.Fatal(err)
 	}
-	expect(LegacyLoad().Store)
+	expect(t, s, storeIs(""), "the deletion")
 	write(path, "recreated")
-	expect("recreated")
+	expect(t, s, storeIs("recreated"), "the recreation")
 	write(path, "recreated-edited")
-	expect("recreated-edited")
+	expect(t, s, storeIs("recreated-edited"), "the edited recreation")
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
-	}
-}
-
-// attach subscribes and takes the opening notice, which is the present rather
-// than a change.
-func attach(t *testing.T) (*Subscription, <-chan Config) {
-	t.Helper()
-	s := LegacyWatchQuiet(0)
-	t.Cleanup(func() { s.Close() })
-	ch := s.Changes()
-	told(t, s, ch)
-	return s, ch
-}
-
-func told(t *testing.T, s *Subscription, ch <-chan Config) Config {
-	t.Helper()
-	select {
-	case c := <-ch:
-		return c
-	case <-time.After(10 * time.Second):
-		t.Fatalf("nothing was reported; told by %s", s.How())
-		return Config{}
 	}
 }
 
 func TestAnEditThroughThisLayerIsReportedToASubscriber(t *testing.T) {
 	path := own(t)
-	s, ch := attach(t)
+	s := attach(t)
 	if err := Edit(path, func(c *Config) error { c.NASStore = `\\nas\models`; return nil }); err != nil {
 		t.Fatal(err)
 	}
-	if got := told(t, s, ch).NASStore; got != `\\nas\models` {
-		t.Fatalf("reported %q", got)
-	}
+	expect(t, s, func(c Config) bool { return c.NASStore == `\\nas\models` }, "the edit")
 }
 
 func TestAnEditByAProgramThatNeverHeardOfUsIsReported(t *testing.T) {
 	path := own(t)
-	s, ch := attach(t)
-	if s.How() == "" {
-		t.Fatal("How says nothing about the mechanism")
-	}
-	// A platform that has one must be using it: falling back to asking here
-	// would pass this test and hide the thing it exists to prove.
-	if notifier != "" && !strings.HasPrefix(s.How(), notifier) {
-		t.Fatalf("%s is available and this subscription is %s", notifier, s.How())
-	}
+	s := attach(t)
 	if err := os.WriteFile(path, []byte(`{"store":"D:\\jobs"}`+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if got := told(t, s, ch).Store; got != `D:\jobs` {
-		t.Fatalf("reported %q; told by %s", got, s.How())
-	}
+	expect(t, s, storeIs(`D:\jobs`), "the foreign write")
 }
 
-// A text editor writes several times to save once, and the first thing a
-// subscriber is told must be the answer that was left behind rather than one of
-// the steps on the way to it.
+// A text editor writes several times to save once; the reread after the burst
+// is the answer that was left behind.
 func TestABurstOfWritesIsReportedAsTheAnswerItLeft(t *testing.T) {
 	path := own(t)
-	s, ch := attach(t)
+	s := attach(t)
 	for _, store := range []string{"one", "two", "three", "settled"} {
 		if err := os.WriteFile(path, []byte(`{"store":"`+store+`"}`+"\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if got := told(t, s, ch).Store; got != "settled" {
-		t.Fatalf("first report was %q, which is a step and not the answer", got)
-	}
-}
-
-func TestTheSameAnswerWrittenAgainIsNotAChange(t *testing.T) {
-	path := own(t)
-	if err := Edit(path, func(c *Config) error { c.Store = "same"; return nil }); err != nil {
-		t.Fatal(err)
-	}
-	s, ch := attach(t)
-	if err := Edit(path, func(c *Config) error { c.Store = "same"; return nil }); err != nil {
-		t.Fatal(err)
-	}
-	if err := Edit(path, func(c *Config) error { c.Store = "different"; return nil }); err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case c := <-ch:
-		if c.Store != "different" {
-			t.Fatalf("reported %q for a write that changed nothing", c.Store)
-		}
-	case <-time.After(10 * time.Second):
-		t.Fatalf("nothing was reported; told by %s", s.How())
-	}
+	expect(t, s, storeIs("settled"), "the settled answer")
 }
 
 // A subscriber that never reads, and one that has gone, must not stop a writer.
 func TestAWriterIsNotHeldUpByASubscriber(t *testing.T) {
 	path := own(t)
-	idle := LegacyWatchQuiet(0)
-	defer idle.Close()
+	idle := attach(t)
 	idle.Changes()
-	gone := LegacyWatchQuiet(0)
+	gone := attach(t)
 	gone.Close()
 	for i := range 50 {
 		if err := Edit(path, func(c *Config) error { c.Store = string(rune('a' + i%26)); return nil }); err != nil {
@@ -190,19 +154,7 @@ func TestTheLayerWorksWithNobodySubscribed(t *testing.T) {
 	if err := Save(path, Config{Store: "alone"}); err != nil {
 		t.Fatal(err)
 	}
-	if got := LegacyLoad().Store; got != "alone" {
+	if got := LoadWithOverrides(nil).Store; got != "alone" {
 		t.Fatalf("read back %q", got)
-	}
-}
-
-func TestCurrentIsTheAnswerBeforeAnythingHasChanged(t *testing.T) {
-	path := own(t)
-	if err := Save(path, Config{Store: "already"}); err != nil {
-		t.Fatal(err)
-	}
-	s := LegacyWatchQuiet(0)
-	defer s.Close()
-	if got := s.Current().Store; got != "already" {
-		t.Fatalf("a fresh subscription says %q", got)
 	}
 }

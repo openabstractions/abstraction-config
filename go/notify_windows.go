@@ -9,10 +9,16 @@ import (
 
 const notifier = "ReadDirectoryChangesW"
 
+// A directory read is issued on whichever OS thread runs the goroutine at that
+// moment. Without a completion port Windows queues the request to that thread,
+// and CancelIoEx does not return while that thread is blocked in unrelated
+// synchronous I/O (a Go stdin reader, for example). A handle associated with a
+// completion port makes the request independent of the issuing thread, so
+// cancellation and completion never wait on it.
 type directoryNotification struct {
 	mu      sync.Mutex
 	h       windows.Handle
-	event   windows.Handle
+	port    windows.Handle
 	overlap windows.Overlapped
 	buffer  [4096]byte
 	closed  bool
@@ -20,9 +26,6 @@ type directoryNotification struct {
 }
 
 func (d *directoryNotification) arm() error {
-	if err := windows.ResetEvent(d.event); err != nil {
-		return err
-	}
 	var n uint32
 	err := windows.ReadDirectoryChanges(d.h, &d.buffer[0], uint32(len(d.buffer)), false,
 		windows.FILE_NOTIFY_CHANGE_FILE_NAME|windows.FILE_NOTIFY_CHANGE_LAST_WRITE|windows.FILE_NOTIFY_CHANGE_SIZE,
@@ -30,6 +33,7 @@ func (d *directoryNotification) arm() error {
 	if errors.Is(err, windows.ERROR_IO_PENDING) {
 		return nil
 	}
+	// A synchronous success still queues its completion packet to the port.
 	return err
 }
 
@@ -50,18 +54,17 @@ func notifyDirs(dirs []string) (<-chan struct{}, func(), error) {
 		if err != nil {
 			continue
 		}
-		event, err := windows.CreateEvent(nil, 1, 0, nil)
+		port, err := windows.CreateIoCompletionPort(h, 0, 0, 1)
 		if err != nil {
 			windows.CloseHandle(h)
 			continue
 		}
-		d := &directoryNotification{h: h, event: event, done: make(chan struct{})}
-		d.overlap.HEvent = event
+		d := &directoryNotification{h: h, port: port, done: make(chan struct{})}
 		// Arm synchronously before the initial configuration snapshot can be read.
 		// Merely opening a directory does not start change notifications.
 		if err := d.arm(); err != nil {
-			windows.CloseHandle(event)
 			windows.CloseHandle(h)
+			windows.CloseHandle(port)
 			continue
 		}
 		open = append(open, d)
@@ -77,6 +80,8 @@ func notifyDirs(dirs []string) (<-chan struct{}, func(), error) {
 				d.mu.Lock()
 				d.closed = true
 				if d.h != 0 {
+					// A pending read completes as aborted; a read already completed
+					// leaves nothing to cancel, and report sees closed under the lock.
 					windows.CancelIoEx(d.h, nil)
 				}
 				d.mu.Unlock()
@@ -95,12 +100,18 @@ func (d *directoryNotification) report(events chan<- struct{}) {
 		d.mu.Lock()
 		windows.CloseHandle(d.h)
 		d.h = 0
-		windows.CloseHandle(d.event)
+		windows.CloseHandle(d.port)
 		d.mu.Unlock()
 	}()
 	for {
 		var n uint32
-		err := windows.GetOverlappedResult(d.h, &d.overlap, &n, true)
+		var key uintptr
+		var overlap *windows.Overlapped
+		err := windows.GetQueuedCompletionStatus(d.port, &n, &key, &overlap, windows.INFINITE)
+		if overlap == nil {
+			// The port itself failed; no completion can arrive through it.
+			return
+		}
 		d.mu.Lock()
 		if d.closed || err != nil {
 			d.mu.Unlock()
