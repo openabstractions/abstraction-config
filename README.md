@@ -99,7 +99,7 @@ calls.
 | removed name | applications use | a deliberate provider adopter calls |
 | --- | --- | --- |
 | Go `Load`, `LegacyLoad` | `facade.Discover().ResolveConfig` | `config.LoadWithOverrides(values)` |
-| Go `JobStore`, `LegacyJobStore` | the resolved job service and its receipts | nothing: the legacy job store has no locator since 0.1.8 |
+| Go `JobStore`, `LegacyJobStore` | the resolved job service and its receipts | nothing: the legacy job store has no locator since 0.2.0 |
 | Go `Watch`, `WatchQuiet`, `LegacyWatchQuiet` | a resolved config reader's snapshot observation | `config.WatchInvalidations`, then reread |
 | Python `load`, `watch`, `job_store` | `Machine.resolve_config()` | `legacy_load`, `legacy_watch`, `legacy_job_store` |
 
