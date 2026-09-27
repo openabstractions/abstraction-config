@@ -64,6 +64,7 @@ func notifyDirs(dirs []string) (<-chan struct{}, func(), error) {
 		// Merely opening a directory does not start change notifications.
 		if err := d.arm(); err != nil {
 			windows.CloseHandle(h)
+			//unchecked: best-effort cleanup on an error path that already discards this directory and continues
 			windows.CloseHandle(port)
 			continue
 		}
@@ -100,6 +101,7 @@ func (d *directoryNotification) report(events chan<- struct{}) {
 		d.mu.Lock()
 		windows.CloseHandle(d.h)
 		d.h = 0
+		//unchecked: shutdown path with no return value to report a close failure through
 		windows.CloseHandle(d.port)
 		d.mu.Unlock()
 	}()

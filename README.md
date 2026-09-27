@@ -1,12 +1,18 @@
 # abstraction-config
 
-Read the settings that tell this computer where OA services keep jobs, content
-and logs, and show whether each value came from the machine, the user, the
-environment or a default. The fixed schema contains `nas_store`, `store`,
-`log_sink`, `log_service` and the closed `off` feature map.
+This layer's schema holds five runtime settings: `nas_store`, `store`,
+`log_sink`, `log_service` and the closed `off` feature map. It never carries
+an application's own settings or secrets ([CFG-X1](CONTRACT.md)); an
+application keeps its own settings in its own files.
+
+A location is one of the three ranked sources a setting can come from:
+machine, user or process (the environment), nearer location winning. Read
+the settings that tell this computer where OA services keep jobs, content
+and logs, and show which location answered each value, or `default` when
+none did.
 
 Applications resolve the reader through the facade. Operator software resolves
-the editor to replace the complete user rung conditionally. Observers long-poll
+the editor to replace the complete user location conditionally. Observers long-poll
 the latest effective snapshot and rebuild after a typed `gap`. Run overrides are
 explicit caller input. The service alone reads machine and user files.
 
@@ -19,7 +25,7 @@ in [config.thrift](config.thrift) and normatively described in
 | service | wire name | does |
 | --- | --- | --- |
 | `ConfigReader` | `abstraction.config/reader@1` | `Read(overrides)` returns a `Snapshot`: the five values, per-key provenance and a stamp |
-| `ConfigEditor` | `abstraction.config/editor@1` | `ReadUser()` and `ReplaceUser(revision, values)` read and revision-check the user rung only |
+| `ConfigEditor` | `abstraction.config/editor@1` | `ReadUser()` and `ReplaceUser(revision, values)` read and revision-check the user location only |
 | `ConfigObserver` | `abstraction.config/observer@1` | `Observe(overrides, cursor, wait_ms)` long-polls the latest snapshot |
 
 `ReplaceUser` returns `applied`, `conflict`, `forbidden` or `unavailable`.
@@ -51,21 +57,15 @@ import (
 
 func main() {
 	ctx := context.Background()
-	editor, err := facade.Discover().ResolveConfigEditor(ctx, facade.Requirements{})
+	config, err := facade.Discover().ResolveConfig(ctx, facade.Requirements{})
 	if err != nil {
 		panic(err)
 	}
-	current, err := editor.ReadUserContext(ctx)
+	snapshot, err := config.ReadContext(ctx)
 	if err != nil {
 		panic(err)
 	}
-	values := current.Values
-	values.LogSink = "configured-provider-setting"
-	result, err := editor.ReplaceUserContext(ctx, current.Revision, values)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(result.Outcome) // "applied", or "conflict" with result.Snapshot
+	fmt.Println(snapshot.Store, snapshot.Origins.Store.Rung)
 }
 ```
 
@@ -86,17 +86,54 @@ auto value = config.read();
 ```
 
 The Go client lives in `go/client`. See [Python setup](py/README.md) and
-[C++ setup](cpp/README.md). A missing or refused service is an error; no
-resolved client falls back to a local file.
+[C++ setup](cpp/README.md). A missing or refused config service fails the
+operation with the resolution error, and no resolved client falls back to a
+local file or keeps a cached copy. Each call resolves fresh, so a later call
+retries once the service is reachable.
 
-## Legacy local provider
+## Operator clients
+
+Operator software resolves the editor to replace the complete user location
+conditionally, revision-checked against the current content.
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+
+	facade "github.com/openabstractions/abstraction-facade/go"
+)
+
+func main() {
+	ctx := context.Background()
+	editor, err := facade.Discover().ResolveConfigEditor(ctx, facade.Requirements{})
+	if err != nil {
+		panic(err)
+	}
+	current, err := editor.ReadUserContext(ctx)
+	if err != nil {
+		panic(err)
+	}
+	values := current.Values
+	values.LogSink = "configured-provider-setting"
+	result, err := editor.ReplaceUserContext(ctx, current.Revision, values)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(result.Outcome) // "applied", or "conflict" with result.Snapshot
+}
+```
+
+## Legacy local provider (deprecated)
 
 `go/config.go` and `python/abstraction_config.py` retain the embedded
-file-reading provider the services above now front. Applications do not call
-it; it is what a service, a setup step, or a deliberate out-of-tree adopter
-calls.
+file-reading provider the services above now front. It is deprecated, kept
+for a service, a setup step, or a deliberate out-of-tree adopter; no removal
+release is named yet. Applications do not call it.
 
-| removed name | applications use | a deliberate provider adopter calls |
+| deprecated name | applications use | a deliberate provider adopter calls |
 | --- | --- | --- |
 | Go `Load`, `LegacyLoad` | `facade.Discover().ResolveConfig` | `config.LoadWithOverrides(values)` |
 | Go `JobStore`, `LegacyJobStore` | the resolved job service and its receipts | nothing: the legacy job store has no locator since 0.2.0 |
@@ -182,6 +219,8 @@ administrator owns ([python/README.md](python/README.md)).
 
 ## Run the service
 
+Install the runtime first: https://openabstractions.org/adopt.html
+
 ```sh
 openabstractions serve config --endpoint <endpoint>
 ```
@@ -190,25 +229,26 @@ One process per user, serving only the account it runs as: it checks the
 kernel-bound caller's account against its own before reading the provider.
 `ABSTRACTION_CONFIG_ENDPOINT` overrides the endpoint for clients and host; the
 default is the shared `config-v1` endpoint convention. The default `openabstractions serve runtime` also registers
-configuration alongside logging and jobs (see
+settings alongside logging and jobs (see
 [abstraction-facade](https://github.com/openabstractions/abstraction-facade)).
 
 ## Today
 
-The rungs, provenance and machine-file trust rules are stated in
+The locations, provenance and machine-file trust rules are stated in
 [CONTRACT.md](CONTRACT.md), each rule tagged and accounted for in
 [testdata/scenarios/rules.tsv](testdata/scenarios/rules.tsv). `go/corpus_test.go`
 and `python/test_corpus.py` replay the scenarios under
 [testdata/scenarios](testdata/scenarios) and compare each language's transcript
 against the recorded `.expected` file byte for byte; Go and Python agree
-through it. That corpus is internal to this layer, not yet cited by the
+through it. That corpus is internal to this module, not yet cited by the
 parent project's cross-repository conformance suite
 (`conformance/capabilities.list`, `conformance/contracts.list`).
 
 - A key the schema does not name is ignored today, not refused
   ([CFG-S1](CONTRACT.md)); refusal is stated and unbuilt.
-- A farther rung locking a key against a nearer one ([CFG-R3](CONTRACT.md)) is
-  stated and unbuilt; nothing exercises it.
+- No retention key exists yet; when the five land, a machine value locks
+  out the user location ([CFG-R4](CONTRACT.md#not-built), next major,
+  [HISTORY.md](HISTORY.md)); nothing exercises the lock today.
 - The editor bounds a persisted user record to 256 KiB; oversized storage
   returns `storage_unavailable` and writes nothing.
 - Generated clients provide the wire interface; the Python artifact is

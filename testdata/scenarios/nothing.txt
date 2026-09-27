@@ -1,5 +1,5 @@
 # A machine nobody has configured. Absent is an answer, not a missing one, and
-# the answer is the default rung.
+# the answer is the default location.
 load
 # expect 1: ok - [CFG-P1]
 key store

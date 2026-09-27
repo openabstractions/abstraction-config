@@ -62,12 +62,12 @@ func ListenWithStore(endpoint string, store casapi.Store, userPath string) (*Hos
 	if owner.Uid == "" {
 		return nil, errors.New("config service: current principal unavailable")
 	}
-	listener, err := listen.Listen(endpoint)
+	listener, err := listen.ListenFramed(endpoint, listen.Program)
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Host{listener: listener, owner: owner.Uid, userStore: store, userPath: userPath, ctx: ctx, cancel: cancel}, nil
+	return &Host{listener: listen.Sessions(listener, listen.SessionOptions{MaxSessions: 64}), owner: owner.Uid, userStore: store, userPath: userPath, ctx: ctx, cancel: cancel}, nil
 }
 func (h *Host) Close() error {
 	var err error

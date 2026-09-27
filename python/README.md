@@ -1,5 +1,11 @@
 # Explicit legacy Python configuration provider
 
+Use `../py`, the generated protocol client, unless you deliberately want this
+package: a local file reader kept for an out-of-tree adopter that reads files
+directly instead of the service.
+
+Install the runtime first: https://openabstractions.org/adopt.html
+
 This `python/` package retains embedded file access for deliberate local-provider
 adoption. `legacy_load`, `legacy_job_store`, `legacy_watch` and
 `legacy_user_path` select this provider; the unprefixed `load`, `job_store` and

@@ -1,257 +1,326 @@
-# Contract
+# abstraction.config contract
 
-Every rule this layer states, each carrying a tag, in the order they were
-decided. A conformance scenario cites the tag it tests on its `# expect` line,
-and a citation that resolves to no rule here is a defect in one of the two.
+Binds: `config.thrift`
 
-[README.md](README.md) is the door — what this layer is, how to obtain it, one
-example that runs. No rule on that page carries a tag.
+`config.thrift` defines `abstraction.config/reader@1`, which reads
+machine, user and process settings with per-key provenance;
+`abstraction.config/editor@1`, which lets a same-account, Program-proven
+caller replace the user location's settings under a compared revision; and
+`abstraction.config/observer@1`, which long-polls the latest effective
+snapshot. A caller of the legacy file provider calls
+`LoadWithOverrides(values)` with its run overrides and is told what tiers
+this machine has. It is never told how to find them, and it is never
+separately configured: there is one settings step per machine, performed by
+whoever installs a tier, and zero per application.
+[README.md](README.md) is the door — what this module is, how to obtain it,
+one example that runs. That page cites rules by their ids and defines none.
 
-A caller of the file provider calls `LoadWithOverrides(values)` with its run overrides and is told what tiers this machine has. It is
-never told how to find them, and it is never separately configured: there is one
-configuration step per machine, performed by whoever installs a tier, and zero
-per application.
+## Reading this page
 
-## The rungs, and which one wins
+The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD",
+"SHOULD NOT", "RECOMMENDED", "MAY" and "OPTIONAL" in this page are to be
+interpreted as described in RFC 2119 and RFC 8174, when, and only when, they
+appear in all capitals, as shown here.
 
-**[CFG-R1] The nearer rung wins: run over user over machine.** Three rungs,
-farthest first — machine, user, run — and the run rung is the environment. The
-user rung beats the machine rung so that a user can opt out of what an
-administrator turned on without needing an administrator.
+A rule id such as `CFG-R1` is declared once, in bold brackets before its
+title, at the head of the rule it names; tests and refusals cite it the same
+way. A retired id is never reused; [HISTORY.md](HISTORY.md) keeps it with
+the release it left. `HISTORY.md` also carries this contract's design
+records and what was measured or tested, linked from here and linking back.
 
-The ancestors order their scopes the same way and phrase it as ours is phrased.
-Group Policy processes local, site, domain and OU in that order, and "settings
-that are applied later can override settings that are applied earlier"
-([Group Policy processing and precedence](https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2003/cc785665(v=ws.10)));
-dconf lists `user-db` then `system-db:local` then `system-db:site`, where "the
-first database in a profile is the write-to database and the remaining databases
-are read-only" ([dconf profiles](https://help.gnome.org/admin/system-admin-guide/stable/dconf-profiles.html.en));
-`UserDefaults` searches managed, argument, app, suite, global and registration
-domains in that order
-([UserDefaults](https://developer.apple.com/documentation/foundation/userdefaults));
-XDG names `$XDG_CONFIG_HOME` and the "preference-ordered set" `$XDG_CONFIG_DIRS`
-([XDG Base Directory](http://specifications.freedesktop.org/basedir/latest/)).
+| letter | topic |
+| --- | --- |
+| R | location — which of machine, user or process answers a key |
+| W | writing and editing — the process override, watching and the user editor |
+| T | trust — the machine location's ownership check |
+| S | schema — the settings schema |
+| P | provenance — which location and path answered each key |
+| E | error and outcome — the outcome words a call can return |
+| X | extension — what may be added to the schema |
 
-**[CFG-R2] A site rung is reserved and absent.** Every ancestor has one and we
-do not implement it. The name is spent rather than free, so a fourth rung added
-later cannot mean something else. No operation can detect this: an absent rung
-answers nothing, so nothing tells *reserved* from *never thought of*.
+| Prose | Wire (until its own release) |
+| --- | --- |
+| location, values `machine`, `user`, `process` | `Origin.rung`, values `machine`, `user`, `environment`; the `RunOverrides` struct (`reader@2`, `editor@2`, `research/vocabulary/RENAME-PLAN.md` §4 "second") |
 
-There is no application rung, and that is settled rather than pending:
-per-application policy is the `rights` layer's record, not a setting, because a
-setting is inherited by the process it would constrain.
+[testdata/scenarios/rules.tsv](testdata/scenarios/rules.tsv) is the
+accounting for the legacy file provider's rules: every tag with the
+scenarios that reach it, or the reason it is unreached. Full accounting,
+never full coverage — a rule no sequence of driver operations can detect
+says so there with its reason, and a rule nothing implements yet says
+that. `go/corpus_test.go` and `python/test_corpus.py` read the scenarios
+beside that file and compare each language's transcript with the recorded
+`.expected` byte for byte, so the two languages agree through it; the same
+tests refuse a tag no rule names and a covered rule no expectation cites.
+That corpus holds [CFG-R1], [CFG-R2], [CFG-P1], [CFG-P2], [CFG-T1]
+through [CFG-T4], [CFG-W1] through [CFG-W4], [CFG-S1] and [CFG-X1]; the
+editor service's rules, [CFG-W5] through [CFG-W15], are held by
+`go/config_test.go` instead (CFG-P2), and a citation that resolves to no
+rule here is a defect in one of the two.
 
-**[CFG-R3] A farther rung may lock a key against a nearer one.** Not built. This
-is the one place [CFG-R1] is reversed, and every ancestor has it: dconf reverses
-the order of precedence for locks
-([dconf lockdown](https://help.gnome.org/admin/system-admin-guide/stable/dconf-lockdown.html.en)),
-Group Policy's **Enforced** applies even with a block from above set, and Apple's
-managed domain is searched first because "apps can't change the value of managed
-keys"
-([objectIsForced](https://developer.apple.com/documentation/foundation/userdefaults/objectisforced(forkey:))).
-Ours is stated and unbuilt: no rung can lock a key today, so there is nothing for
-a scenario to reach.
+## The locations, and which one wins
 
-## Provenance
+A location is one of the three ranked sources a setting can come from:
+machine, user or process (the environment).
 
-**[CFG-P1] Every answer carries provenance per key: a rung and a path, or
-`environment`, or `default`.** Per key and not per struct. A machine that sets
-`nas_store` in the machine file and `store` in the user file has two answers from
-two authorities, and one string for the whole configuration can only name one of
-them — a person who cannot work out why their downloads are going somewhere
-unexpected needs the file that says so for the key they asked about.
+**[CFG-R1] The nearer location wins: process over user over machine.** The
+service MUST resolve each key from the nearest location that answered it:
+process, then user, then machine. The process location MUST be the
+environment. The user location MUST beat the machine location, so a user
+can opt out of what an administrator turned on without needing an
+administrator, except a retention key ([CFG-R4]): the administrator owns
+the disk.
 
-A key nothing set came from the `default` rung. That is an answer, not a missing
-one: absent means this machine does not have that tier, which is normal.
+**[CFG-R2] A site location is reserved and absent.** Every ancestor has one
+and the service MUST NOT implement it. The name is spent rather than free,
+so a fourth location added later cannot mean something else. No operation
+can detect this: an absent location answers nothing, so nothing tells
+*reserved* from *never thought of*.
 
-Answering per key is what the ancestors do. Apple's `objectIsForced(forKey:)`
-answers, per key, whether an administrator provided the value; GSettings
-distinguishes `g_settings_get_user_value` from `g_settings_get_default_value` per
-key ([GSettings](https://docs.gtk.org/gio/class.Settings.html)).
+There is no application location, and that is settled rather than pending:
+per-application policy is the `rights` module's record, not a setting,
+because a setting is inherited by the process it would constrain.
 
-**[CFG-P2] The path half of provenance names the file that answered.** Held by
-`abstraction-config/go/config_test.go` and `abstraction-config/python/test_abstraction_config.py` rather
-than by the corpus: a path is one machine's, so no transcript two machines
-compare byte for byte can carry it.
+## Writing and editing
 
-## The machine rung is trusted by ownership
+**[CFG-W1] A subscription reports the answer when it differs.** A
+subscription MUST report the answer when it differs, from whichever process
+wrote it, and MUST name its mechanism. A platform that must be asked on a
+timer MUST say so rather than hiding it in a latency. Held over wall time
+and across processes by `abstraction-config/go/watch_test.go` and
+`abstraction-config/python/test_abstraction_config.py`; a transcript
+compared byte for byte carries neither, so the corpus reaches the
+comparison half only, as [CFG-W2].
 
-**[CFG-T1] The machine rung is read only when an administrator owns the file and
-its directory, and an untrusted file is ignored rather than obeyed.** A
-machine-wide file an ordinary process could write is a machine-wide file anyone
-could write, so it does not get to speak for the machine. Ignored is not deleted:
-the file stays where it is.
+**[CFG-W2] The stamp follows the answer, not the location that gave it.**
+The stamp MUST differ whenever the answer differs and MUST stay unchanged
+when the same values arrive from a different location. A process running
+for days asks for the stamp rather than rebuilding everything to find out
+whether it needs to, so a stamp that moved when only provenance moved would
+make it rebuild for nothing. This is the comparison [CFG-W1] leaves to the
+client, in the one form a transcript can hold.
 
-The ancestor is OpenSSH `StrictModes`, and the check is the same one — ownership
-of the file and of the directory holding it, not permission bits alone.
+**[CFG-W3] The environment is an override for the process location, and an
+empty variable is not one.** Taking the variable away MUST give the file
+its key back, which is what makes it an override rather than an edit. It
+exists so a test, a container or a one-off run can redirect a location
+without writing to a file other processes on the machine are reading.
 
-**[CFG-T2] An ignored file is said on stderr, never silently.** This applies to
-every reason a file is not used: untrusted ownership, and a file that will not
-parse. A malformed file does not take the application down and does not pass
-unmentioned either — the whole point of this layer is that somebody can find out
-why a tier is not being used, and silence is the failure mode it exists to
-prevent.
+A variable set to the empty string MUST NOT override. Shells export empty
+strings for variables nobody set, and a location that took them would
+silently unconfigure every machine that has one.
 
-**[CFG-T3] A machine file an administrator did own is read.** Untestable by the
-corpus, and untestable for the reason that makes [CFG-T1] worth having: a driver
-running as an ordinary user cannot create a root- or Administrators-owned
-fixture, because the rule under test is exactly what stops it writing one.
-
-**[CFG-T4] A write to the machine rung that no reader would trust is refused,
-and leaves nothing behind.** [CFG-T1] read from the writing side. Writing a file
-every reader ignores succeeds into silence — the tool reports the machine
-configured and the machine disagrees — and the directory matters more than the
-file: `C:\ProgramData` grants `BUILTIN\Users` `(CI)(WD,AD,WEA,WA)`, so whoever
-creates `%ProgramData%\abstraction` owns it and keeps it, and a machine rung
-whose directory an ordinary account owns can never be read by anybody again,
-including the administrator who installs afterwards. So an unprivileged write is
-what takes the rung away, and refusing it is what leaves an administrator
-somewhere to write.
-
-Ownership can be tried and not predicted — the same call is `Administrators`
-from an installer and the person from a shell — so the directory is created,
-asked who owns it, and removed again when the answer is wrong.
-
-## The environment is an override for one run
-
-**[CFG-E1] The environment is an override for one run, and an empty variable is
-not one.** Taking the variable away gives the file its key back, which is what
-makes it an override rather than an edit. It exists so that a test, a container
-or a one-off run can redirect a tier without writing to a file other processes on
-the machine are reading.
-
-A variable set to the empty string is not an override. Shells export empty
-strings for variables nobody set, and a rung that took them would silently
-unconfigure every machine that has one.
-
-**[CFG-E2] A value taken from the environment is never observed to change.** An
-absence, and it is why the environment is an override and not the mechanism.
-Kubernetes reports the same shape from the other side: mounted ConfigMaps "are
-updated automatically" after a kubelet sync period, and environment variables are
-not updated
-([ConfigMap](https://kubernetes.io/docs/concepts/configuration/configmap/)). No
+**[CFG-W4] A value taken from the environment is never observed to
+change.** The service MUST NOT emit a change notice for it. An absence,
+and it is why the environment is an override and not the mechanism: no
 sequence of calls can observe a notice that is never sent.
 
-## Watching
+**[CFG-W5] Settings carry no storage authority.** A path-valued setting
+MUST NOT convey authority to open provider storage. `ConfigEditor` exposes
+the same four strings and `off` map as settings.
 
-**[CFG-W1] A subscription reports the answer when it differs, from whichever
-process wrote it, and names its mechanism.** A platform that must be asked on a
-timer says so rather than hiding it in a latency. Held over wall time and across
-processes by `abstraction-config/go/watch_test.go` and
-`abstraction-config/python/test_abstraction_config.py`; a transcript compared byte for byte
-carries neither, so the corpus reaches the comparison half only, as [CFG-W2].
+**[CFG-W6] The user backing file is chosen, not supplied.** The service
+MUST select its user-location path at startup; no request MUST supply that
+path.
 
-Every ancestor splits the two paths and none of them promises what changed.
-`RegNotifyChangeKeyValue` "detects a single change", says nothing about what
-changed, and must be re-armed
-([winreg](https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regnotifychangekeyvalue));
-Apple's `didChangeNotification` is "posted when the current process changes the
-value" and is not generated when a different process changes the settings, while
-KVO "reports all updates to setting values, regardless of which process made the
-change"
-([didChangeNotification](https://developer.apple.com/documentation/foundation/userdefaults/didchangenotification));
-Consul's blocking queries return with "no guarantee of a change", so the client
-compares
-([Consul blocking](https://developer.hashicorp.com/consul/api-docs/features/blocking)).
+**[CFG-W7] Reading the user location.** `ReadUser` MUST return user values
+and an opaque normalized-content revision, excluding the machine and
+process locations. Missing storage MUST read as empty values. Unreadable,
+corrupt or unsupported storage MUST return `storage_unavailable`.
 
-**[CFG-W2] The stamp follows the answer, not the rung that gave it.** The stamp
-differs whenever the answer differs and is unchanged when the same values arrive
-from a different rung. A process running for days asks for the stamp rather than
-rebuilding everything to find out whether it needs to, so a stamp that moved when
-only provenance moved would make it rebuild for nothing. This is the comparison
-[CFG-W1] leaves to the client, in the one form a transcript can hold.
+**[CFG-W8] Replacing the user location.** `ReplaceUser` MUST compare the
+supplied revision under the existing CAS edit lock and MUST replace
+atomically only on a match. A stale revision MUST return `conflict` with
+the current user content and MUST NOT write. An empty expected revision
+MUST return `invalid_revision`. A storage failure MUST return
+`storage_unavailable`. A match MUST return `applied` with the written
+snapshot.
+
+**[CFG-W9] Clearing a user override.** An empty string or an empty `off`
+map MUST remove the corresponding user override. Farther locations MUST
+remain unchanged.
+
+**[CFG-W10] Revision is a content token.** Equal normalized content MUST
+have equal revision, including after restoring earlier values. The
+revision MUST NOT stand for an operation identity or a monotonic sequence.
+
+**[CFG-W11] Edit policy.** A host MAY configure `EnableEditPolicy` before
+`Serve`. `ReplaceUser` MUST evaluate it for the rechecked peer after
+same-account proof and before storage access. An evaluated refusal MUST
+return `forbidden`; a failed or cancelled decision MUST return
+`unavailable`, which a caller MAY retry. Both outcomes MUST carry empty
+values and an empty revision and MUST leave storage untouched. The
+installed runtime asks the rights service for
+`abstraction.config/user.replace` on `abstraction.config/editor@1`.
+`ReadUser` keeps same-account access alone. A client generated before
+these outcomes MUST refuse to decode them.
+
+**[CFG-W12] Waiting never grants a retry by itself.** An expired or
+cancelled wait MUST NOT grant a write retry; the caller MUST reread and
+reconcile an uncertain replacement before a new edit. The Go reader,
+editor and observer MUST wait `client.DefaultTimeout`, two seconds, per
+call unless the transport or the call's context sets another limit. An
+edit policy decision MUST answer within that wait: the installed runtime
+bounds it to 500 ms and MUST answer `unavailable` past it.
+
+**[CFG-W13] The machine location is omitted for an isolated runtime.** A
+host MAY call `OmitMachineRung` before `Serve`. Its reads MUST then answer
+from the user location and process overrides alone, reading neither the
+machine file nor its directory. `serve runtime --state-dir` (every
+`--isolated` runtime) MUST omit it beside its own user file.
+
+**[CFG-W14] Unknown persisted fields are refused.** The editor MUST refuse
+an unknown persisted field rather than drop it during replacement. This
+strict boundary MUST NOT change `LoadWithOverrides` behavior.
+
+**[CFG-W15] The persisted record is bounded.** A persisted editor record
+MUST NOT exceed 256 KiB, leaving room for the generated snapshot and reply
+envelope within the shared 1 MiB config frame budget. Both a CAS read and
+a proposed replacement MUST enforce the bound. Oversized storage MUST
+return `storage_unavailable`, and no partial replacement is written.
+
+## The machine location is trusted by ownership
+
+**[CFG-T1] The machine location is read only when trusted by ownership.**
+The service MUST read the machine location only when an administrator owns
+the file and its directory, and MUST ignore an untrusted file rather than
+obey it. A machine-wide file an ordinary process could write is a
+machine-wide file anyone could write, so it does not get to speak for the
+machine. Ignored is not deleted: the file stays where it is.
+
+**[CFG-T2] An ignored file is said on stderr, never silently.** This
+applies to every reason a file is not used: untrusted ownership, and a
+file that will not parse. A malformed file MUST NOT take the application
+down, and MUST NOT pass unmentioned either — the whole point of this rule
+is that somebody can find out why a location is not being used, and
+silence is the failure mode it exists to prevent.
+
+**[CFG-T3] A machine file an administrator did own is read.** Untestable
+by the corpus, and untestable for the reason that makes [CFG-T1] worth
+having: a driver running as an ordinary user cannot create a root- or
+Administrators-owned fixture, because the rule under test is exactly what
+stops it writing one.
+
+**[CFG-T4] A write to the machine location that no reader would trust is
+refused, and leaves nothing behind.** [CFG-T1] read from the writing side.
+Writing a file every reader ignores succeeds into silence — the tool
+reports the machine configured and the machine disagrees — and the
+directory matters more than the file: `C:\ProgramData` grants
+`BUILTIN\Users` `(CI)(WD,AD,WEA,WA)`, so whoever creates
+`%ProgramData%\abstraction` owns it and keeps it, and a machine location
+whose directory an ordinary account owns can never be read by anybody
+again, including the administrator who installs afterwards. An
+unprivileged write MUST be refused, and refusing it is what leaves an
+administrator somewhere to write.
+
+Ownership can be tried and not predicted — the same call is
+`Administrators` from an installer and the person from a shell — so the
+directory is created, asked who owns it, and removed again when the
+answer is wrong.
 
 ## The schema
 
-**[CFG-S1] A key the schema does not name is refused, not ignored.** Not built:
-both implementations ignore an unknown key today. The schema is closed, and its
-ancestor is GSettings, where "you have to specify a schema that describes the
-keys in your settings and their types and default values". Its home is this
-layer's one definition in the IDL profile, the same way `abstraction-job/job.thrift` is the
-job layer's.
+**[CFG-S1] An unnamed key is ignored today, not refused.** The service
+MUST ignore a key the schema does not name; refusing it is
+[Not built](#not-built). The schema's home MUST be this module's one
+definition in the IDL profile, the same way `abstraction-job/job.thrift`
+is the job module's.
 
-**[CFG-X1] No secret and no policy is a setting.** Nobody is refused a read and
-nothing needs to be, because this layer carries pointers to tiers and nothing
-else. A key that would need a read restriction is in the wrong layer. This is a
-rule about what may be added to the schema rather than about any answer, so no
-sequence of calls can detect it.
+**[CFG-X1] No secret and no policy is a setting.** Nobody is refused a
+read and nothing needs to be, because this module carries pointers to
+tiers and limits the service enforces. A key that would need a read
+restriction is in the wrong module. This is a rule about what may be
+added to the schema rather than about any answer, so no sequence of calls
+can detect it.
 
-## Declared divergence: where the file is
+## Provenance
 
-We do not store in the registry, in plists or in dconf. One JSON file goes at the
-platform's configuration directory — `%AppData%`, `~/Library/Application
-Support`, `$XDG_CONFIG_HOME`
-([os.UserConfigDir](https://pkg.go.dev/os#UserConfigDir)) — because three
-languages already read that one file byte for byte, and no platform store is
-readable from all three without a platform binding per language.
+**[CFG-P1] Every answer carries provenance per key: a location and a
+path, or `environment`, or `default`.** Provenance MUST be reported per
+key and not per struct. A machine that sets `nas_store` in the machine
+file and `store` in the user file has two answers from two authorities,
+and one string for the whole settings document can only name one of them
+— a person who cannot work out why their downloads are going somewhere
+unexpected needs the file that says so for the key they asked about.
 
-The seat is the POSIX kind: each platform furnishes scope, provenance and
-notification its own way, and there is no common call an application can make on
-all three.
+A key nothing set MUST report the `default` location. That is an answer,
+not a missing one: absent means this machine does not have that tier,
+which is normal.
 
-## Backward compatibility
+**[CFG-P2] The path half of provenance names the file that answered.**
+Held by `abstraction-config/go/config_test.go` and
+`abstraction-config/python/test_abstraction_config.py` rather than by the
+corpus: a path is one machine's, so no transcript two machines compare
+byte for byte can carry it.
 
-**Every key is optional and absent is an answer.** A file written before a key
-existed loads unchanged, and the key reads as `default` with [CFG-P1]
-provenance. Adding a key is therefore not a flag day.
+## Outcomes
 
-**An incompatible change to a key's meaning is a new key, never an edit to this
-one.** A reader too old to know a key ignores it today, which is [CFG-S1]'s
-absence stated from the other side: until unknown keys are refused, an edited
-meaning reaches an old reader as the old meaning and nothing says so.
+**[CFG-E3] Only a resolved answer carries settings.**
+`storage_unavailable`, `caller_unavailable`, `identity_required`,
+`wrong_user`, `forbidden`, `unavailable` and `invalid_revision` MUST carry
+no settings; `conflict` MUST carry the current user snapshot without
+applying the proposed one; `applied` MUST carry the written snapshot.
 
-**Provenance is not part of the stored document.** It is derived at load from
-which rung answered, so it cannot go stale in a file and [CFG-W2] holds.
+| Call | Outcome | Meaning |
+| --- | --- | --- |
+| `Read` | success | Returns a `Snapshot`: the five keys, per-key provenance and a stamp (CFG-P1, CFG-W2). |
+| `Read`, `ReadUser` | `caller_unavailable` | The caller's account could not be established. |
+| `Read`, `ReadUser` | `identity_required` | The transport carries no identity to check. |
+| `Read`, `ReadUser` | `wrong_user` | The caller does not own the service's account. |
+| `Read` | `storage_unavailable` | A trusted machine or user file could not be read (CFG-T1, CFG-T3). |
+| `ReadUser` | success | Returns user values and a revision (CFG-W7). |
+| `ReadUser` | `storage_unavailable` | Unreadable, corrupt or unsupported storage; missing storage is empty values, not this outcome (CFG-W7). |
+| `ReplaceUser` | `applied` | The compared revision matched; returns the written snapshot (CFG-W8). |
+| `ReplaceUser` | `conflict` | A stale revision; returns the current snapshot, no write (CFG-W8). |
+| `ReplaceUser` | `invalid_revision` | The expected revision is empty (CFG-W8). |
+| `ReplaceUser` | `storage_unavailable` | The write could not reach storage (CFG-W8, CFG-W15). |
+| `ReplaceUser` | `forbidden` | An evaluated edit policy refused the write (CFG-W11). |
+| `ReplaceUser` | `unavailable` | The edit policy decision could not be obtained; retryable (CFG-W11). |
+| `Observe` | `snapshot` | A new revision; carries values, provenance and a new cursor (CFG-W1). |
+| `Observe` | `unchanged` | The same revision; carries the original cursor, no snapshot (CFG-W1). |
+| `Observe` | `gap` | The provider restarted or the override binding changed; requires an empty-cursor restart. |
+| `Observe` | `unsupported` | The provider offers no change notification. |
+| `Observe` | `unavailable` | Bounded waiter exhaustion or provider notification failure. |
+| `Observe` | `invalid` | The cursor or an override exceeds its bound. |
 
-## Accounting
+## Bounds
 
-[testdata/scenarios/rules.tsv](testdata/scenarios/rules.tsv) is the accounting
-for this page: every tag above with the scenarios that reach it, or the reason it
-is unreached. Full accounting, never full coverage — a rule no sequence of driver
-operations can detect says so there with its reason, and a rule nothing
-implements yet says that.
+| what | bound | rule |
+| --- | --- | --- |
+| persisted editor record | at most 256 KiB | CFG-W15 |
+| config wire frame | at most 1 MiB (shared) | CFG-W15 |
+| Go client per-call wait | 2 seconds (`client.DefaultTimeout`) | CFG-W12 |
+| edit policy decision | at most 500 ms | CFG-W12 |
 
-`abstraction-config/go/corpus_test.go` and `abstraction-config/python/test_corpus.py` read the scenarios
-beside that file and compare each language's transcript with the recorded
-`.expected` byte for byte, so the two languages agree through it. The same tests
-refuse a tag no rule names and a covered rule no expectation cites.
+## Divergences
 
-## Tested
+- **CFG-P2.** The file lives at the platform's settings directory —
+  `%AppData%`, `~/Library/Application Support`, `$XDG_CONFIG_HOME`
+  ([os.UserConfigDir](https://pkg.go.dev/os#UserConfigDir)) — never the
+  registry, plists or dconf: three languages already read that one file
+  byte for byte, and no platform store is readable from all three without
+  a platform binding per language. The seat is the POSIX kind: each
+  platform furnishes scope, provenance and notification its own way, and
+  there is no common call an application can make on all three.
 
-```bash
-(cd go && go test ./...)
-(cd python && python -m unittest discover -p 'test_*.py')
-```
+## Not built
 
-## User editing service
+- [CFG-S1] Refusing an unknown key. Both implementations ignore one
+  today instead.
 
-`abstraction.config/editor@1` shares the identity-bound config endpoint with the
-unchanged `abstraction.config/reader@1` interface. The receiver requires the
-same-account Program-proven caller before accessing user storage.
+### Next major (`reader@2`, `editor@2`, `observer@2`)
 
-| Operation boundary | Behavior |
-| --- | --- |
-| Settings | The existing four strings and `off` map describe configuration. Path-valued settings convey no authority to open provider storage. |
-| Backing file | The service selects its user-rung path at startup; no request supplies that path. |
-| ReadUser | Returns user values and an opaque normalized-content revision. Missing storage is empty; unreadable, corrupt or unsupported records are refused. Machine and environment rungs are excluded. |
-| ReplaceUser | Compares revision and replaces under the existing CAS edit lock. A stale revision returns `conflict` plus current user content without a write. `applied` returns the written snapshot. |
-| Clearing | Empty strings and an empty map remove user overrides. Lower rungs remain unchanged. |
-| Revision | Equal normalized content has equal revision, including after restoring earlier values. It is a content comparison token, not an operation identity or monotonic sequence. |
-| Refusal | `invalid_revision` rejects an empty expected revision; `storage_unavailable` preserves failed storage. Identity errors preserve the reader's `caller_unavailable`, `identity_required` and `wrong_user` codes. |
-| Edit policy | A host may configure `EnableEditPolicy` before Serve. ReplaceUser then evaluates it for the rechecked peer after same-account proof and before storage access. An evaluated refusal returns `forbidden`; a callback wrapping `ErrEditPolicyUnavailable` or a cancelled call returns `unavailable`, which a caller may retry. Both carry empty values and an empty revision and leave storage untouched. The runtime's `ConfigEditPolicyFromRights` asks the rights service for `abstraction.config/user.replace` on `abstraction.config/editor@1`. ReadUser keeps same-account access. Clients generated before these outcomes refuse to decode them. |
-| Waiting | Expired/canceled waiting never grants a write retry. Reread and reconcile an uncertain replacement before deciding a new edit. The Go reader, editor and observer wait `client.DefaultTimeout`, two seconds, per call unless the transport or the call's context sets another limit. An edit policy answers within that wait: the installed runtime bounds its rights decision to 500 ms and answers `unavailable` past it. |
+**[CFG-R4] Locked retention key.** A retention key set at the machine
+location MUST win over the user location; an unset machine value MUST
+answer from the user location. This is the reversal [CFG-R1] otherwise
+forbids, reserved for these five keys alone.
 
-A host may call `OmitMachineRung` before Serve. Its reads then answer from the
-user rung and run overrides, and read neither the machine file nor its
-directory. `serve runtime` with `--state-dir` (every `--isolated` runtime) omits
-it beside its own user file.
+**[CFG-S2] Retention keys.** The schema gains five optional keys, absent
+as default: `cache_max_use`, `cache_max_retention`, `tmp_max_retention`,
+`logs_max_use` and `logs_max_retention`.
 
-The editor refuses unknown persisted fields rather than dropping them during
-replacement. This strict editor boundary does not change `LoadWithOverrides` behavior.
-Generated clients provide the wire interface; the Python artifact is vocabulary
-and transport injection, without a separately implemented Python config host.
-
-This provider bounds persisted editor records to 256KiB, leaving room for the
-generated snapshot and reply envelope within the 1MiB config frame budget. Both
-CAS reads and proposed replacements enforce the bound. Oversized storage is
-`storage_unavailable`; no partial replacement is written.
+`Snapshot`, `Origins` and `RunOverrides` refuse an unknown field
+(`config.thrift`), so five new fields are a version, not an addition:
+[CFG-R4] and [CFG-S2] land together at `reader@2`, `editor@2` and
+`observer@2`, carrying [CFG-R1]'s location values beside them
+(`research/storage-classes/DECISION.md` §8,
+`research/vocabulary/RENAME-PLAN.md` §4 "second").

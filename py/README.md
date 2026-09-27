@@ -1,5 +1,11 @@
 # Python configuration service protocol
 
+Use this package. `../python` is the legacy local file reader, kept for a
+deliberate out-of-tree adopter that reads files directly instead of the
+service.
+
+Install the runtime first: https://openabstractions.org/adopt.html
+
 The generated ConfigReader and ConfigEditor use the shared native IPC transport
 through the resolved facade. Install the coordinated identity, config
 and facade `py/` packages and configure the installed native IPC library as

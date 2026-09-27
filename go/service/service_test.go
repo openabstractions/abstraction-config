@@ -171,7 +171,7 @@ func TestMalformedSourceUsesProviderFallback(t *testing.T) {
 func requireProgramProof(t *testing.T) {
 	t.Helper()
 	if runtime.GOOS == "darwin" {
-		t.Skip("UNPROVEN successful calls: Darwin cannot meet Program process/path proof; TestInsufficientProofRefusesBeforeProvider covers refusal")
+		t.Skip("UNPROVEN successful calls: Darwin cannot meet Program process/path proof; TestInsufficientProofRefusesBeforeProvider covers startup refusal")
 	}
 }
 
@@ -180,24 +180,18 @@ func TestInsufficientProofRefusesBeforeProvider(t *testing.T) {
 		t.Skip("Darwin-specific proof ceiling")
 	}
 	isolated(t)
-	var reads atomic.Int32
-	failures := make(chan error, 1)
-	_, c := host(t, func(h *Host) {
-		h.load = func(map[string]string) config.Config { reads.Add(1); return config.Config{} }
-		h.OnError = func(err error) { failures <- err }
-	})
-	if _, err := c.ReadWithOverrides(wire.RunOverrides{}); err == nil {
-		t.Fatal("insufficiently proven caller received configuration")
+	endpoint := listen.Endpoint(fmt.Sprintf("config-proof-%d-%d", os.Getpid(), serial.Add(1)))
+	h, err := Listen(endpoint)
+	if h != nil {
+		h.Close()
+		t.Fatal("insufficiently proven caller created a host")
 	}
-	select {
-	case err := <-failures:
-		if !errors.Is(err, identity.ErrNotProven) {
-			t.Fatalf("expected proof refusal, got %v", err)
+	if !errors.Is(err, identity.ErrNotProven) {
+		t.Fatalf("expected startup proof refusal, got %v", err)
+	}
+	for _, path := range []string{endpoint, endpoint + ".lock"} {
+		if _, err := os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("proof refusal created endpoint artifact %q: %v", path, err)
 		}
-	case <-time.After(time.Second):
-		t.Fatal("missing proof refusal")
-	}
-	if reads.Load() != 0 {
-		t.Fatal("insufficiently proven caller reached provider")
 	}
 }
