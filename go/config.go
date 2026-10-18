@@ -153,16 +153,12 @@ func load(environment func(string) string) Config {
 // UserPath is where a per-user configuration belongs on this OS, following the
 // platform's own convention rather than inventing one. A tool that scatters
 // dotfiles where the OS did not ask for them is the thing this project keeps
-// complaining about.
+// complaining about. Without a platform config folder there is no user tier.
 func UserPath() string {
 	if dir, err := os.UserConfigDir(); err == nil {
 		return filepath.Join(dir, Name, "config.json")
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(home, "."+Name, "config.json")
+	return ""
 }
 
 // MachinePath is where an administrator's configuration belongs.

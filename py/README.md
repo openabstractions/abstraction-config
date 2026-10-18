@@ -1,5 +1,7 @@
 # Python configuration service protocol
 
+*For Python applications.*
+
 Use this package. `../python` is the legacy local file reader, kept for a
 deliberate out-of-tree adopter that reads files directly instead of the
 service.

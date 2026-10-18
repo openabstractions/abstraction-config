@@ -28,6 +28,8 @@ class Box(unittest.TestCase):
         for name, value in (("HOME", home),
                             ("USERPROFILE", home),
                             ("AppData", os.path.join(root, "appdata")),
+                            ("LOCALAPPDATA", os.path.join(root, "localappdata")),
+                            ("XDG_DATA_HOME", os.path.join(root, "xdgdata")),
                             ("ProgramData", os.path.join(root, "programdata")),
                             ("XDG_CONFIG_HOME", os.path.join(root, "xdg"))):
             os.makedirs(value, exist_ok=True)
@@ -95,8 +97,33 @@ class Provenance(Box):
 
     def test_job_store_falls_back_to_the_default(self):
         root, came_from = config.legacy_job_store()
-        self.assertTrue(root.endswith(".abstraction"), root)
+        self.assertEqual(os.path.join(config.data_dir(), "job-store"), root)
         self.assertIn("default", came_from)
+
+    def test_a_legacy_home_store_gets_one_notice(self):
+        home = os.path.expanduser("~")
+        store = config.legacy_job_store()[0]
+        self.assertEqual("", config.legacy_home_store_notice(store, home))
+        legacy = os.path.join(home, ".abstraction")
+        os.makedirs(os.path.join(legacy, "jobs"))
+        open(os.path.join(legacy, "jobs", "a.json"), "w").close()
+        notice = config.legacy_home_store_notice(store, home)
+        self.assertIn(legacy, notice)
+        self.assertIn("ABSTRACTION_STORE", notice)
+        self.assertNotIn("\n", notice)
+        os.makedirs(os.path.join(store, "jobs"))
+        open(os.path.join(store, "jobs", "b.json"), "w").close()
+        self.assertEqual("", config.legacy_home_store_notice(store, home))
+
+    def test_no_default_resolves_under_the_home_folder_root(self):
+        # File History backs up the profile root whole; OA state belongs in
+        # the platform's per-user data or config folder (owner, 2026-10-06).
+        home = os.path.normcase(os.path.abspath(os.path.expanduser("~")))
+        for path in (config.legacy_job_store()[0], config.user_path()):
+            rel = os.path.relpath(os.path.normcase(os.path.abspath(path)), home)
+            first = rel.split(os.sep)[0]
+            self.assertFalse(first.startswith(".abstraction") or first == ".modelget", path)
+        self.assertNotEqual(home, os.path.normcase(config.data_dir()))
 
 
 class Trust(Box):

@@ -1,5 +1,7 @@
 # Explicit legacy Python configuration provider
 
+*For Python adopters that deliberately read configuration files directly.*
+
 Use `../py`, the generated protocol client, unless you deliberately want this
 package: a local file reader kept for an out-of-tree adopter that reads files
 directly instead of the service.

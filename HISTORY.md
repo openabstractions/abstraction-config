@@ -2,6 +2,28 @@
 
 Linked from [CONTRACT.md](CONTRACT.md)'s "Reading this page."
 
+## 2026-10-06: the job store leaves the home folder root
+
+The file job store's default moved from `~/.abstraction` to `job-store`
+under the per-user data folder: Go `LegacyJobStore()` over `DataDir()`,
+Python `legacy_job_store()` over `data_dir()`. File History backs up the
+home folder root whole, and the old store held a socket reparse point.
+Two fallbacks are removed: an existing `~/.modelget` is no longer the
+store, and `UserPath()`/`user_path()` no longer fall back to
+`~/.abstraction/config.json`. For one release, a default store with no jobs
+beside a `~/.abstraction` or `~/.modelget` that has jobs prints one line
+naming that folder and `ABSTRACTION_STORE`.
+
+Go and Python diverge on FreeBSD and other Unix systems: Go `DataDirFor`
+refuses any platform other than windows, darwin and linux, and Python
+`data_dir()` treats them as Linux (`$XDG_DATA_HOME`, default
+`~/.local/share`).
+
+`abstraction-model/go/go.mod` now requires `abstraction-config/go` directly
+for `LegacyJobStore`. A `GOWORK=off` build of modelget fails until
+`abstraction-config/go` is released with `datadir.go` and the requirement is
+bumped to that version.
+
 ## Superseded ids
 
 **CFG-R3**, "No rung locks a key against a nearer one today," is retired

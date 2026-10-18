@@ -127,14 +127,12 @@ class Config:
 
 def user_path():
     """Where a per-user configuration belongs on this OS, following the
-    platform's own convention rather than inventing one."""
+    platform's own convention rather than inventing one. Without a platform
+    config folder there is no user tier."""
     directory = _user_config_dir()
     if directory:
         return os.path.join(directory, NAME, "config.json")
-    home = os.path.expanduser("~")
-    if not home or home == "~":
-        return ""
-    return os.path.join(home, "." + NAME, "config.json")
+    return ""
 
 
 def machine_path():
@@ -231,20 +229,59 @@ def stamp():
 def legacy_job_store():
     """Where jobs live on this machine, and what said so.
 
-    Configuration first, then the default. An existing ~/.modelget keeps being
-    the store, because moving the default on upgrade would strand whatever is
-    in flight -- a store is a directory of real work, not a cache.
+    Configuration first, then job-store under data_dir(). The home folder
+    root is never a default.
     """
     c = legacy_load()
     if c.store:
         return c.store, str(c.origin("store"))
-    home = os.path.expanduser("~")
-    if not home or home == "~":
-        raise OSError("this machine has no home directory, so there is no store to default to")
-    legacy = os.path.join(home, ".modelget")
-    if os.path.isdir(legacy):
-        return legacy, "the default; an existing .modelget"
-    return os.path.join(home, "." + NAME), "the default; nothing is configured"
+    data = data_dir()
+    if not data:
+        raise OSError("this account has no per-user data folder, so there is no store to default to")
+    store = os.path.join(data, "job-store")
+    notice = legacy_home_store_notice(store, os.path.expanduser("~"))
+    if notice:
+        sys.stderr.write("abstraction_config: " + notice + "\n")
+    return store, "the default; nothing is configured"
+
+
+def legacy_home_store_notice(store, home):
+    """One line for the release after the job store left the home folder
+    root: when store holds no jobs and ~/.abstraction or ~/.modelget does, it
+    names that folder and ABSTRACTION_STORE. Otherwise empty."""
+    def has_jobs(path):
+        try:
+            return bool(os.listdir(os.path.join(path, "jobs")))
+        except OSError:
+            return False
+    if has_jobs(store) or not home or home == "~":
+        return ""
+    for name in (".abstraction", ".modelget"):
+        legacy = os.path.join(home, name)
+        if has_jobs(legacy):
+            return ("jobs from an earlier release are in %s; set ABSTRACTION_STORE=%s "
+                    "to keep using them" % (legacy, legacy))
+    return ""
+
+
+def data_dir():
+    """OA's per-user data folder, as the Go config.DataDir resolves it:
+    %LOCALAPPDATA%\\openabstractions, ~/Library/Application Support/openabstractions
+    or $XDG_DATA_HOME/openabstractions (default ~/.local/share). Never the
+    home folder itself. Empty when the platform folder cannot be named."""
+    if sys.platform == "win32":
+        base = os.environ.get("LOCALAPPDATA", "")
+    elif sys.platform == "darwin":
+        home = os.environ.get("HOME", "")
+        base = os.path.join(home, "Library", "Application Support") if os.path.isabs(home) else ""
+    else:
+        base = os.environ.get("XDG_DATA_HOME", "")
+        if not base:
+            home = os.environ.get("HOME", "")
+            base = os.path.join(home, ".local", "share") if os.path.isabs(home) else ""
+    if not base or not os.path.isabs(base):
+        return ""
+    return os.path.join(base, "openabstractions")
 
 
 # ------------------------------------------------------------ ownership ---

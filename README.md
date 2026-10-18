@@ -1,9 +1,19 @@
 # abstraction-config
 
+*For operators who set OA's own runtime settings. Applications read them
+through [Application clients](#application-clients).*
+
+abstraction-config holds OA's own runtime settings, such as where OA services
+on this computer keep jobs, content and logs.
+
+**What's new here:** OA's settings say where each value came from: every answer
+names the location (machine, user or process) that set it, and edits are
+revisioned, so two editors cannot overwrite each other unseen.
+
 This layer's schema holds five runtime settings: `nas_store`, `store`,
 `log_sink`, `log_service` and the closed `off` feature map. It never carries
-an application's own settings or secrets ([CFG-X1](CONTRACT.md)); an
-application keeps its own settings in its own files.
+an application's own settings or secrets; an application keeps its own
+settings in its own files.
 
 A location is one of the three ranked sources a setting can come from:
 machine, user or process (the environment), nearer location winning. Read
@@ -15,6 +25,8 @@ Applications resolve the reader through the facade. Operator software resolves
 the editor to replace the complete user location conditionally. Observers long-poll
 the latest effective snapshot and rebuild after a typed `gap`. Run overrides are
 explicit caller input. The service alone reads machine and user files.
+
+The example is in [Application clients](#application-clients).
 
 ## Service contracts
 
@@ -193,7 +205,17 @@ command. `UserPath()` and `MachinePath()` give this platform's conventional
 locations; `MachinePath` returns an empty string on Windows when
 `ProgramData` is unset. `EnvVars` maps each JSON field to the environment
 variable that overrides it: `ABSTRACTION_NAS_STORE`, `ABSTRACTION_STORE`,
-`ABSTRACTION_LOG`, `ABSTRACTION_LOG_SERVICE`.
+`ABSTRACTION_LOG`, `ABSTRACTION_LOG_SERVICE`. `UserPath` returns an empty
+string when the platform has no user config folder.
+
+`DataDir()` is OA's per-user data folder: `%LOCALAPPDATA%\openabstractions`
+on Windows, `~/Library/Application Support/openabstractions` on macOS and
+`$XDG_DATA_HOME/openabstractions` (default `~/.local/share`) on Linux. The
+runtime keeps `runtime-v1` there. `LegacyJobStore()` is `job-store` under
+it, the file job store's location when neither `store` nor
+`ABSTRACTION_STORE` names one; Python's `data_dir()` and `legacy_job_store()`
+resolve the same paths. No default resolves to a folder in the home folder
+root such as `~/.abstraction`.
 
 `LoadWithOverrides` never reads this process's environment: a service passes
 the run overrides its caller supplied. The Python package's `legacy_user_path`
@@ -279,6 +301,25 @@ Go 1.26 or newer for the Go module. Python 3.9 or newer for the legacy provider,
 No dependency outside the standard library and this project's own packages.
 Tested on Windows and Linux; macOS is unproven.
 
+## Contract rules
+
+The rule that the schema never carries an application's own settings or
+secrets is [CFG-X1](CONTRACT.md).
+
 ## Licence
 
 Apache-2.0. See [LICENSE](LICENSE).
+
+<!-- BEGIN GENERATED PERMISSION DEFINITIONS -->
+
+## Permission definitions
+
+Generated from the existing compiled catalogue. [RIGHTS.json](RIGHTS.json) contains the complete action/profile records, disclosure, lifecycle, first-use behavior, selector support and finite bundles.
+
+This reference records compiled receiving support; RIGHTS.json names the compilation context. A connected runtime advertises current availability and selector support. These definitions supply no grant.
+
+| Action | Resource profile | Owning operations | First-use targets | Compiled receiver |
+|---|---|---|---|---|
+| `abstraction.config/user.replace` | `abstraction.rights/legacy-exact-string@1` | `abstraction.config/editor@1#ReplaceUser` | `none` | served in compiled context |
+
+<!-- END GENERATED PERMISSION DEFINITIONS -->

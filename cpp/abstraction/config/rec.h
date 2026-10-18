@@ -654,6 +654,8 @@ inline void enc_oa_config_reader_read_arguments(std::string& out, const OAConfig
 }
 
 inline void enc_oa_config_editor_read_user_arguments(std::string& out, const OAConfigEditorReadUserArguments& v, int depth) {
+    (void)v;
+    (void)depth;
     out += '{';
     out += '}';
 }
@@ -1591,7 +1593,6 @@ inline OAConfigEditorReadUserArguments decode_oa_config_editor_read_user_argumen
     r.enter();
     ++r.pos;
     OAConfigEditorReadUserArguments v;
-    std::uint32_t seen = 0;
     r.skip_ws();
     if (r.at() != '}') {
         for (;;) {
@@ -2140,6 +2141,7 @@ throw ServiceError("unknown_method","");}catch(const ServiceError&e){return deta
 }
 private:
 Raw invoke_read_user(const detail::OAConfigEditorReadUserArguments&args){
+(void)args;
 UserSnapshot result{};
 try{
 result=handler.read_user();

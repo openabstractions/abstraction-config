@@ -1,5 +1,7 @@
 # Configuration service client
 
+*For C++ applications.*
+
 Install the runtime first: https://openabstractions.org/adopt.html
 
 The C++ client reads the existing per-user configuration provider through the identity-bound Go service. It does not read configuration files, create a store, run a provider, or fall back when the service is absent.
