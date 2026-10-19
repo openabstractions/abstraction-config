@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	config "github.com/openabstractions/abstraction-config/go"
 	wire "github.com/openabstractions/abstraction-config/go/abstraction/config"
 	"os"
@@ -128,6 +129,7 @@ func (h *Host) startObservation() bool {
 	}
 	go func() {
 		defer close(o.done)
+		armed, delay := time.Now(), rearmFirstDelay
 		for {
 			select {
 			case <-h.ctx.Done():
@@ -140,18 +142,95 @@ func (h *Host) startObservation() bool {
 					o.gate.Advance()
 					continue
 				}
-				o.mu.Lock()
-				o.failed = true
-				o.mu.Unlock()
-				o.gate.Fail(errors.New("config: observation source ended"))
-				if h.OnObservationStopped != nil {
-					h.OnObservationStopped()
+				// A source that ends again soon after rearming waits longer.
+				if time.Since(armed) > rearmMaxDelay {
+					delay = rearmFirstDelay
 				}
-				return
+				if changes, delay = h.rearmObservation(delay); changes == nil {
+					return
+				}
+				armed = time.Now()
 			}
 		}
 	}()
 	return true
+}
+
+// Rearm delays between attempts to recreate the watched folder.
+const (
+	rearmFirstDelay = 50 * time.Millisecond
+	rearmMaxDelay   = 5 * time.Second
+)
+
+// rearmObservation runs when the source ends, typically because the watched
+// configuration folder was deleted or moved. It stops the ended source, lets
+// waiters reread, and starts the source again; the source recreates the folder.
+// Each attempt waits delay first, which doubles up to rearmMaxDelay; on Windows
+// a deleted folder stays pending until its last handle closes. Until a source
+// starts the observation reports unavailable. It returns the new changes and
+// the next delay, or nil changes once the host closes.
+func (h *Host) rearmObservation(delay time.Duration) (<-chan struct{}, time.Duration) {
+	o := &h.observation
+	o.mu.Lock()
+	ended := o.stop
+	o.mu.Unlock()
+	ended()
+	if h.ctx.Err() != nil {
+		return nil, delay
+	}
+	o.gate.Advance()
+	h.observationLog(errors.New("config: the watched configuration folder went away; recreating it and watching again"))
+	reported := false
+	for {
+		select {
+		case <-h.ctx.Done():
+			return nil, delay
+		case <-time.After(delay):
+		}
+		delay = min(2*delay, rearmMaxDelay)
+		changes, stop, e := o.source(h.ctx)
+		if e == nil && changes != nil && stop != nil {
+			o.mu.Lock()
+			if h.ctx.Err() != nil {
+				o.mu.Unlock()
+				stop()
+				return nil, delay
+			}
+			o.stop = stop
+			wasFailed := o.failed
+			o.failed = false
+			o.mu.Unlock()
+			// Changes made between the end and the new watch are read now.
+			o.gate.Advance()
+			h.observationLog(errors.New("config: watching the configuration folder again"))
+			if wasFailed && h.OnObservationStopped != nil {
+				h.OnObservationStopped()
+			}
+			return changes, delay
+		}
+		if stop != nil {
+			stop()
+		}
+		if !reported {
+			reported = true
+			o.mu.Lock()
+			o.failed = true
+			o.mu.Unlock()
+			if e == nil {
+				e = errors.New("source returned no changes")
+			}
+			h.observationLog(fmt.Errorf("config: cannot watch the configuration folder yet, retrying: %w", e))
+			if h.OnObservationStopped != nil {
+				h.OnObservationStopped()
+			}
+		}
+	}
+}
+
+func (h *Host) observationLog(e error) {
+	if h.OnError != nil && h.ctx.Err() == nil {
+		h.OnError(e)
+	}
 }
 func (h *Host) stopObservation() {
 	o := &h.observation

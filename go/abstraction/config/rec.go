@@ -5,6 +5,8 @@ import oa_dependency_rights "github.com/openabstractions/abstraction-rights/go/a
 
 import "time"
 
+import "runtime/debug"
+
 type Raw = string
 
 func escByte(out []byte, c byte) []byte {
@@ -10673,6 +10675,23 @@ func serviceReply(v *oaServiceFrame, payload Raw, err error) (frame []byte, outE
 	return frame, nil
 }
 
+// handlerPanic writes a recovered handler panic and its stack to standard error.
+func handlerPanic(service, method string, p interface{}) {
+	value := "a value that is neither a string nor an error"
+	func() {
+		defer func() { _ = recover() }()
+		switch v := p.(type) {
+		case string:
+			value = v
+		case error:
+			value = v.Error()
+		case interface{ String() string }:
+			value = v.String()
+		}
+	}()
+	print(service, " ", method, ": handler panic: ", value, "\n", string(debug.Stack()))
+}
+
 // EndpointContract is abstraction.facade/endpoint@1, which every dispatcher
 // answers beside its own service.
 const EndpointContract = "abstraction.facade/endpoint@1"
@@ -10880,7 +10899,8 @@ func ServeEndpointRemote(frame []byte, program, version string, admit func(contr
 			return &ServiceError{Code: "forbidden", Message: "remote admission required"}
 		}
 		defer func() {
-			if recover() != nil {
+			if p := recover(); p != nil {
+				handlerPanic(v.Service, v.Method+" admission", p)
 				err = &ServiceError{Code: ServiceErrorCodeHandlerError, Message: "handler failed"}
 			}
 		}()
@@ -11100,6 +11120,7 @@ func (d *ConfigReaderDispatcher) invokeRead(args *oaConfigReaderReadArguments) (
 			if _, ok := p.(*Refusal); ok {
 				err = &ServiceError{Code: ServiceErrorCodeInvalidResult}
 			} else {
+				handlerPanic("abstraction.config/reader@1", "Read", p)
 				err = &ServiceError{Code: ServiceErrorCodeHandlerError, Message: "handler failed"}
 			}
 		}
@@ -11343,6 +11364,7 @@ func (d *ConfigEditorDispatcher) invokeReadUser(args *oaConfigEditorReadUserArgu
 			if _, ok := p.(*Refusal); ok {
 				err = &ServiceError{Code: ServiceErrorCodeInvalidResult}
 			} else {
+				handlerPanic("abstraction.config/editor@1", "ReadUser", p)
 				err = &ServiceError{Code: ServiceErrorCodeHandlerError, Message: "handler failed"}
 			}
 		}
@@ -11375,6 +11397,7 @@ func (d *ConfigEditorDispatcher) invokeReplaceUser(args *oaConfigEditorReplaceUs
 			if _, ok := p.(*Refusal); ok {
 				err = &ServiceError{Code: ServiceErrorCodeInvalidResult}
 			} else {
+				handlerPanic("abstraction.config/editor@1", "ReplaceUser", p)
 				err = &ServiceError{Code: ServiceErrorCodeHandlerError, Message: "handler failed"}
 			}
 		}
@@ -11583,6 +11606,7 @@ func (d *ConfigObserverDispatcher) invokeObserve(args *oaConfigObserverObserveAr
 			if _, ok := p.(*Refusal); ok {
 				err = &ServiceError{Code: ServiceErrorCodeInvalidResult}
 			} else {
+				handlerPanic("abstraction.config/observer@1", "Observe", p)
 				err = &ServiceError{Code: ServiceErrorCodeHandlerError, Message: "handler failed"}
 			}
 		}
@@ -11834,6 +11858,7 @@ func (d *ConfigReaderV2Dispatcher) invokeRead(args *oaConfigReaderV2ReadArgument
 			if _, ok := p.(*Refusal); ok {
 				err = &ServiceError{Code: ServiceErrorCodeInvalidResult}
 			} else {
+				handlerPanic("abstraction.config/reader@2", "Read", p)
 				err = &ServiceError{Code: ServiceErrorCodeHandlerError, Message: "handler failed"}
 			}
 		}
@@ -11870,6 +11895,7 @@ func (d *ConfigReaderV2Dispatcher) invokeDescribe(args *oaConfigReaderV2Describe
 			if _, ok := p.(*Refusal); ok {
 				err = &ServiceError{Code: ServiceErrorCodeInvalidResult}
 			} else {
+				handlerPanic("abstraction.config/reader@2", "Describe", p)
 				err = &ServiceError{Code: ServiceErrorCodeHandlerError, Message: "handler failed"}
 			}
 		}
@@ -12117,6 +12143,7 @@ func (d *ConfigEditorV2Dispatcher) invokeReadUser(args *oaConfigEditorV2ReadUser
 			if _, ok := p.(*Refusal); ok {
 				err = &ServiceError{Code: ServiceErrorCodeInvalidResult}
 			} else {
+				handlerPanic("abstraction.config/editor@2", "ReadUser", p)
 				err = &ServiceError{Code: ServiceErrorCodeHandlerError, Message: "handler failed"}
 			}
 		}
@@ -12153,6 +12180,7 @@ func (d *ConfigEditorV2Dispatcher) invokeReplaceUser(args *oaConfigEditorV2Repla
 			if _, ok := p.(*Refusal); ok {
 				err = &ServiceError{Code: ServiceErrorCodeInvalidResult}
 			} else {
+				handlerPanic("abstraction.config/editor@2", "ReplaceUser", p)
 				err = &ServiceError{Code: ServiceErrorCodeHandlerError, Message: "handler failed"}
 			}
 		}
@@ -12357,6 +12385,7 @@ func (d *ConfigObserverV2Dispatcher) invokeObserve(args *oaConfigObserverV2Obser
 			if _, ok := p.(*Refusal); ok {
 				err = &ServiceError{Code: ServiceErrorCodeInvalidResult}
 			} else {
+				handlerPanic("abstraction.config/observer@2", "Observe", p)
 				err = &ServiceError{Code: ServiceErrorCodeHandlerError, Message: "handler failed"}
 			}
 		}

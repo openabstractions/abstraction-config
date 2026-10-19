@@ -288,9 +288,23 @@ func TestConfigObserverSelectedStoreRequiresItsOwnSource(t *testing.T) {
 	if h.ObservationAvailable() {
 		t.Fatal("injected store inherited file notification")
 	}
-	changes := make(chan struct{}, 1)
-	if e = h.EnableObservation(func(context.Context) (<-chan struct{}, func(), error) { return changes, func() {}, nil }); e != nil {
+	var sources struct {
+		sync.Mutex
+		current chan struct{}
+		started int
+	}
+	if e = h.EnableObservation(func(context.Context) (<-chan struct{}, func(), error) {
+		sources.Lock()
+		defer sources.Unlock()
+		sources.current, sources.started = make(chan struct{}, 1), sources.started+1
+		return sources.current, func() {}, nil
+	}); e != nil {
 		t.Fatal(e)
+	}
+	source := func() (chan struct{}, int) {
+		sources.Lock()
+		defer sources.Unlock()
+		return sources.current, sources.started
 	}
 	done := make(chan error, 1)
 	go func() { done <- h.Serve(context.Background()) }()
@@ -309,6 +323,7 @@ func TestConfigObserverSelectedStoreRequiresItsOwnSource(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
+	changes, _ := source()
 	changes <- struct{}{}
 	current, e := c.ObserveContext(context.Background(), wire.RunOverrides{}, first.Cursor, 1000)
 	if e != nil || current.Snapshot == nil || current.Snapshot.Store != "selected" {
@@ -319,22 +334,34 @@ func TestConfigObserverSelectedStoreRequiresItsOwnSource(t *testing.T) {
 		t.Fatal("unavailable selected store became a snapshot")
 	}
 	store.fail.Store(false)
+	// A closed source is started again, and the new one delivers changes.
 	close(changes)
-	deadline := time.Now().Add(time.Second)
+	deadline := time.Now().Add(3 * time.Second)
 	for {
-		h.observation.mu.Lock()
-		failed := h.observation.failed
-		h.observation.mu.Unlock()
-		if failed {
+		if next, started := source(); started == 2 && h.ObservationAvailable() {
+			changes = next
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("closed change source ignored")
+			t.Fatal("closed change source not started again")
 		}
 		runtime.Gosched()
 	}
-	unavailable, e := c.ObserveContext(context.Background(), wire.RunOverrides{}, current.Cursor, 0)
-	if e != nil || unavailable.Outcome != wire.ConfigObservationOutcomeUnavailable {
-		t.Fatal(unavailable, e)
+	if u, e = editor.ReadUserContext(context.Background()); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = editor.ReplaceUserContext(context.Background(), u.Revision, wire.UserSettings{Store: "again", Off: map[string]string{}}); e != nil {
+		t.Fatal(e)
+	}
+	changes <- struct{}{}
+	for cursor := current.Cursor; ; {
+		next, e := c.ObserveContext(context.Background(), wire.RunOverrides{}, cursor, 1000)
+		if e != nil || next.Snapshot == nil {
+			t.Fatal(next, e)
+		}
+		if next.Snapshot.Store == "again" {
+			break
+		}
+		cursor = next.Cursor
 	}
 }
