@@ -75,6 +75,7 @@ type InvalidationSubscription struct {
 	done    chan struct{}
 	cancel  context.CancelFunc
 	stop    func()
+	cause   func() error
 	once    sync.Once
 	mu      sync.Mutex
 	closed  bool
@@ -83,12 +84,29 @@ type InvalidationSubscription struct {
 // WatchInvalidations reuses native directory notification and edit announcements.
 // It refuses an unavailable native mechanism; it never installs a polling fallback.
 func WatchInvalidations() (*InvalidationSubscription, error) {
-	events, stop, e := notifyDirs(watchable())
+	var files []string
+	for _, s := range searchPaths() {
+		files = append(files, s.path)
+	}
+	return watchDirs(watchable(), files)
+}
+
+// WatchFile reports possible changes of one configuration file, through
+// native notification on its directory and this process's edit announcements.
+// The directory must exist; its owner creates it before watching.
+func WatchFile(path string) (*InvalidationSubscription, error) {
+	return watchDirs([]string{filepath.Dir(path)}, []string{path})
+}
+
+// watchDirs watches dirs and, where the notifier needs it for in-place
+// writes (kqueue), the named files inside them.
+func watchDirs(dirs, files []string) (*InvalidationSubscription, error) {
+	events, stop, cause, e := watch.Dirs(dirs, files)
 	if e != nil {
 		return nil, e
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	s := &InvalidationSubscription{changes: make(chan struct{}, 1), done: make(chan struct{}), cancel: cancel, stop: stop}
+	s := &InvalidationSubscription{changes: make(chan struct{}, 1), done: make(chan struct{}), cancel: cancel, stop: stop, cause: cause}
 	live.mu.Lock()
 	if live.invalidations == nil {
 		live.invalidations = map[*InvalidationSubscription]bool{}
@@ -103,6 +121,10 @@ func WatchInvalidations() (*InvalidationSubscription, error) {
 	return s, nil
 }
 func (s *InvalidationSubscription) Changes() <-chan struct{} { return s.changes }
+
+// Err is why Changes closed: nil after Close, otherwise the native source's
+// cause, such as a watched directory that was deleted or moved.
+func (s *InvalidationSubscription) Err() error { return s.cause() }
 func (s *InvalidationSubscription) signal() {
 	s.mu.Lock()
 	defer s.mu.Unlock()

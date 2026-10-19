@@ -207,6 +207,12 @@ func read(path, rung string) (Config, error) {
 	return decodeSource(b, path, rung)
 }
 
+// machineReadError distinguishes trusted storage failures from source refusals.
+type machineReadError struct{ err error }
+
+func (e *machineReadError) Error() string { return e.err.Error() }
+func (e *machineReadError) Unwrap() error { return e.err }
+
 // readMachineSource is the service-side machine source. Trust is checked
 // before reading bytes; callers retain the merged reader's refusal fallback.
 func readMachineSource(path string, checkTrust func(string) error) (Config, error) {
@@ -216,7 +222,7 @@ func readMachineSource(path string, checkTrust func(string) error) (Config, erro
 	}
 	data, err := cas.ReadLimit(path, MaxUserFileBytes)
 	if err != nil {
-		return Config{}, err
+		return Config{}, &machineReadError{err: err}
 	}
 	return decodeSource(data, path, Machine)
 }

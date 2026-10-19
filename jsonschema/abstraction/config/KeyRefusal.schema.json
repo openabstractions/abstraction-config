@@ -1,0 +1,73 @@
+{
+  "$defs": {
+    "rights.RefusalDetail": {
+      "additionalProperties": true,
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "ask": {
+          "enum": [
+            "available",
+            "none"
+          ],
+          "type": "string"
+        },
+        "credential": {
+          "type": "string"
+        },
+        "decision": {
+          "enum": [
+            "denied",
+            "not_granted",
+            "person_only"
+          ],
+          "type": "string"
+        },
+        "question": {
+          "type": "string"
+        },
+        "retry_after_ms": {
+          "maximum": 86400000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "decision",
+        "ask"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "properties": {
+    "key": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_.-]*$",
+      "type": "string"
+    },
+    "reason": {
+      "enum": [
+        "not_granted",
+        "unknown_key"
+      ],
+      "type": "string"
+    },
+    "refusal": {
+      "$ref": "#/$defs/rights.RefusalDetail"
+    }
+  },
+  "required": [
+    "key",
+    "reason"
+  ],
+  "title": "KeyRefusal",
+  "type": "object"
+}

@@ -7,4 +7,5 @@ description = "Generated OpenAbstractions config Rust service protocol"
 path = "../rs/abstraction/config/rec.rs"
 
 [dependencies]
+abstraction-rights-api = { path = "../../abstraction-rights/rust" }
 abstraction-frame = { path = "../../abstraction-identity/rust-frame" }

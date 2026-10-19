@@ -1,0 +1,87 @@
+{
+  "$defs": {
+    "Origin": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "rung": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "rung",
+        "path"
+      ],
+      "type": "object"
+    },
+    "Origins": {
+      "additionalProperties": false,
+      "properties": {
+        "log_service": {
+          "$ref": "#/$defs/Origin"
+        },
+        "log_sink": {
+          "$ref": "#/$defs/Origin"
+        },
+        "nas_store": {
+          "$ref": "#/$defs/Origin"
+        },
+        "off": {
+          "$ref": "#/$defs/Origin"
+        },
+        "store": {
+          "$ref": "#/$defs/Origin"
+        }
+      },
+      "required": [
+        "nas_store",
+        "store",
+        "log_sink",
+        "log_service",
+        "off"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "log_service": {
+      "type": "string"
+    },
+    "log_sink": {
+      "type": "string"
+    },
+    "nas_store": {
+      "type": "string"
+    },
+    "off": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "origins": {
+      "$ref": "#/$defs/Origins"
+    },
+    "stamp": {
+      "type": "string"
+    },
+    "store": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "nas_store",
+    "store",
+    "log_sink",
+    "log_service",
+    "off",
+    "origins",
+    "stamp"
+  ],
+  "title": "Snapshot",
+  "type": "object"
+}

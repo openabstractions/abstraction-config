@@ -1,0 +1,319 @@
+[
+  {
+    "key": "cache_max_use",
+    "kind": "bytes",
+    "description": "Keep cached objects up to this size.",
+    "group": "storage",
+    "apply": "live",
+    "lockable": true,
+    "lowest_location": "machine",
+    "range": {
+      "min": 0,
+      "max": 9223372036854775807
+    },
+    "presets": [
+      {
+        "kind": "bytes",
+        "bytes": 4294967296
+      },
+      {
+        "kind": "bytes",
+        "bytes": 17179869184
+      },
+      {
+        "kind": "bytes",
+        "bytes": 68719476736
+      },
+      {
+        "kind": "unlimited"
+      }
+    ],
+    "allows_unlimited": true
+  },
+  {
+    "key": "cache_max_retention",
+    "kind": "duration",
+    "description": "Keep cached objects for this long.",
+    "group": "storage",
+    "apply": "live",
+    "lockable": true,
+    "lowest_location": "machine",
+    "range": {
+      "min": 0,
+      "max": 9223372036854
+    },
+    "presets": [
+      {
+        "kind": "duration",
+        "duration_ms": 604800000
+      },
+      {
+        "kind": "duration",
+        "duration_ms": 2592000000
+      },
+      {
+        "kind": "duration",
+        "duration_ms": 7776000000
+      },
+      {
+        "kind": "unlimited"
+      }
+    ],
+    "allows_unlimited": true
+  },
+  {
+    "key": "tmp_max_retention",
+    "kind": "duration",
+    "description": "Keep temporary objects for this long.",
+    "group": "storage",
+    "apply": "live",
+    "lockable": true,
+    "lowest_location": "machine",
+    "default": {
+      "kind": "duration",
+      "duration_ms": 864000000
+    },
+    "range": {
+      "min": 1,
+      "max": 9223372036854
+    },
+    "presets": [
+      {
+        "kind": "duration",
+        "duration_ms": 86400000
+      },
+      {
+        "kind": "duration",
+        "duration_ms": 864000000
+      },
+      {
+        "kind": "duration",
+        "duration_ms": 2592000000
+      }
+    ],
+    "allows_unlimited": false
+  },
+  {
+    "key": "logs_max_use",
+    "kind": "bytes",
+    "description": "Keep logs up to this size.",
+    "group": "storage",
+    "apply": "live",
+    "lockable": true,
+    "lowest_location": "machine",
+    "range": {
+      "min": 0,
+      "max": 9223372036854775807
+    },
+    "presets": [
+      {
+        "kind": "bytes",
+        "bytes": 1073741824
+      },
+      {
+        "kind": "bytes",
+        "bytes": 4294967296
+      },
+      {
+        "kind": "bytes",
+        "bytes": 17179869184
+      },
+      {
+        "kind": "unlimited"
+      }
+    ],
+    "default_description": "10% of the drive, at most 4 GB",
+    "allows_unlimited": true
+  },
+  {
+    "key": "logs_max_retention",
+    "kind": "duration",
+    "description": "Keep logs for this long.",
+    "group": "storage",
+    "apply": "live",
+    "lockable": true,
+    "lowest_location": "machine",
+    "range": {
+      "min": 0,
+      "max": 9223372036854
+    },
+    "presets": [
+      {
+        "kind": "duration",
+        "duration_ms": 604800000
+      },
+      {
+        "kind": "duration",
+        "duration_ms": 2592000000
+      },
+      {
+        "kind": "duration",
+        "duration_ms": 7776000000
+      },
+      {
+        "kind": "unlimited"
+      }
+    ],
+    "allows_unlimited": true
+  },
+  {
+    "key": "messages_start_questions",
+    "kind": "boolean",
+    "description": "Start a closed agent to answer a question.",
+    "group": "messages",
+    "apply": "live",
+    "lockable": true,
+    "lowest_location": "machine",
+    "default": {
+      "kind": "boolean",
+      "boolean": true
+    },
+    "presets": [],
+    "allows_unlimited": false
+  },
+  {
+    "key": "messages_start_notes",
+    "kind": "boolean",
+    "description": "Start a closed agent for a note.",
+    "group": "messages",
+    "apply": "live",
+    "lockable": true,
+    "lowest_location": "machine",
+    "default": {
+      "kind": "boolean"
+    },
+    "presets": [],
+    "allows_unlimited": false
+  },
+  {
+    "key": "messages_start_per_hour",
+    "kind": "choice",
+    "description": "Limit each agent to this many starts each hour.",
+    "group": "messages",
+    "apply": "live",
+    "lockable": true,
+    "lowest_location": "machine",
+    "default": {
+      "kind": "choice",
+      "choice": "1"
+    },
+    "presets": [
+      {
+        "kind": "choice",
+        "choice": "1"
+      },
+      {
+        "kind": "choice",
+        "choice": "2"
+      },
+      {
+        "kind": "choice",
+        "choice": "4"
+      }
+    ],
+    "choices": [
+      "1",
+      "2",
+      "4"
+    ],
+    "allows_unlimited": false
+  },
+  {
+    "key": "messages_start_open_app",
+    "kind": "boolean",
+    "description": "Open the agent's app when it cannot start for a message.",
+    "group": "messages",
+    "apply": "live",
+    "lockable": true,
+    "lowest_location": "machine",
+    "default": {
+      "kind": "boolean"
+    },
+    "presets": [],
+    "allows_unlimited": false
+  },
+  {
+    "key": "prompt_cache_persist",
+    "kind": "boolean",
+    "description": "Keep saved prompt data for faster replies.",
+    "group": "models",
+    "apply": "live",
+    "lockable": true,
+    "lowest_location": "machine",
+    "default": {
+      "kind": "boolean",
+      "boolean": true
+    },
+    "presets": [],
+    "allows_unlimited": false
+  },
+  {
+    "key": "prompt_cache_max_use",
+    "kind": "bytes",
+    "description": "Keep saved prompt data up to this size.",
+    "group": "models",
+    "apply": "live",
+    "lockable": true,
+    "lowest_location": "machine",
+    "default": {
+      "kind": "bytes",
+      "bytes": 4294967296
+    },
+    "range": {
+      "min": 1,
+      "max": 9223372036854775807
+    },
+    "presets": [
+      {
+        "kind": "bytes",
+        "bytes": 2147483648
+      },
+      {
+        "kind": "bytes",
+        "bytes": 4294967296
+      },
+      {
+        "kind": "bytes",
+        "bytes": 8589934592
+      },
+      {
+        "kind": "bytes",
+        "bytes": 17179869184
+      }
+    ],
+    "allows_unlimited": false
+  },
+  {
+    "key": "model_context",
+    "kind": "text_map",
+    "description": "Context each conversation gets, for each local model.",
+    "group": "models",
+    "apply": "live",
+    "lockable": true,
+    "lowest_location": "machine",
+    "presets": [],
+    "allows_unlimited": false
+  },
+  {
+    "key": "nas_store",
+    "kind": "text",
+    "description": "Network job store address.",
+    "group": "downloads",
+    "apply": "restart",
+    "lockable": false,
+    "lowest_location": "machine",
+    "presets": [],
+    "allows_unlimited": false
+  },
+  {
+    "key": "disabled_download_delegates",
+    "kind": "text_map",
+    "description": "Download delegates that are switched off, with their reasons.",
+    "group": "downloads",
+    "apply": "live",
+    "lockable": false,
+    "lowest_location": "machine",
+    "presets": [],
+    "allows_unlimited": false
+  }
+]

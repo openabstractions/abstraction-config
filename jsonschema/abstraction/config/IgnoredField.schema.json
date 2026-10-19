@@ -1,0 +1,55 @@
+{
+  "$defs": {
+    "ConfigSource": {
+      "additionalProperties": true,
+      "properties": {
+        "location": {
+          "enum": [
+            "machine",
+            "user",
+            "process"
+          ],
+          "type": "string"
+        },
+        "path": {
+          "maxLength": 4096,
+          "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "location",
+        "path"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "properties": {
+    "name_excerpt": {
+      "maxLength": 64,
+      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]*$",
+      "type": "string"
+    },
+    "offset": {
+      "maximum": 262144,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "source": {
+      "$ref": "#/$defs/ConfigSource"
+    }
+  },
+  "required": [
+    "offset",
+    "name_excerpt",
+    "reason",
+    "source"
+  ],
+  "title": "IgnoredField",
+  "type": "object"
+}

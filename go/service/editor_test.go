@@ -127,7 +127,7 @@ func TestUserEditorConcurrentReplacement(t *testing.T) {
 }
 func TestUserEditorRefusesStorageAndWrongUser(t *testing.T) {
 	requireProgramProof(t)
-	for _, body := range []string{"", "null", "{", `{"future":true}`, `{} {}`, `{"store":42}`, `{"store":null}`, `{"off":null}`, `{"off":{"nas":null}}`, `{"STORE":"case"}`, `{"store":"one","store":"two"}`, `{"store":"\ud800"}`, `{"store":"\udc00"}`, "{\"store\":\"" + string([]byte{0xff}) + "\"}"} {
+	for _, body := range []string{"", "null", "{", `{} {}`, `{"store":42}`, `{"store":null}`, `{"off":null}`, `{"off":{"nas":null}}`, `{"store":"one","store":"two"}`, `{"store":"\ud800"}`, `{"store":"\udc00"}`, "{\"store\":\"" + string([]byte{0xff}) + "\"}"} {
 		t.Run(fmt.Sprintf("corrupt-%q", body), func(t *testing.T) {
 			isolated(t)
 			path := config.UserPath()

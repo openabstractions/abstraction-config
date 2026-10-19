@@ -11,15 +11,43 @@
   "definitions": [
     {
       "definition": {
+        "action": "abstraction.config/key.read",
+        "owner_contract": "abstraction.config/reader@2",
+        "operations": [
+          "abstraction.config/reader@2#Read",
+          "abstraction.config/observer@2#Observe"
+        ],
+        "resource_profile": "abstraction.rights/legacy-exact-string@1",
+        "resource_type": "string (exact catalogue key)",
+        "enforced_by": [
+          "abstraction.config/reader@2",
+          "abstraction.config/observer@2"
+        ],
+        "disclosure": "Read exact registered configuration keys as a native-proven designated provider. Settings carry no credentials; metadata grants no access.",
+        "lifecycle": "One current kept provider declaration, native image and account; exact keys, removed with registration. Never a person prompt.",
+        "first_use": "none",
+        "served": true
+      },
+      "label": "abstraction.config/key.read",
+      "supported_selectors": [],
+      "first_use_selectors": [],
+      "collection": "One current kept provider declaration, native image and account; exact keys, removed with registration. Never a person prompt.",
+      "all_effect": "",
+      "request_type": "string (exact catalogue key)"
+    },
+    {
+      "definition": {
         "action": "abstraction.config/user.replace",
         "owner_contract": "abstraction.config/editor@1",
         "operations": [
-          "abstraction.config/editor@1#ReplaceUser"
+          "abstraction.config/editor@1#ReplaceUser",
+          "abstraction.config/editor@2#ReplaceUser"
         ],
         "resource_profile": "abstraction.rights/legacy-exact-string@1",
         "resource_type": "string (legacy exact resource)",
         "enforced_by": [
-          "abstraction.config/editor@1"
+          "abstraction.config/editor@1",
+          "abstraction.config/editor@2"
         ],
         "disclosure": "Atomic user-settings replace.",
         "lifecycle": "All persisted user rung values in one replace.",

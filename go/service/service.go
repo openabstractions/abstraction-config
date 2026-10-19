@@ -8,24 +8,25 @@ import (
 	casapi "github.com/openabstractions/abstraction-cas/go/api"
 	config "github.com/openabstractions/abstraction-config/go"
 	wire "github.com/openabstractions/abstraction-config/go/abstraction/config"
+	identity "github.com/openabstractions/abstraction-identity"
 	"github.com/openabstractions/abstraction-identity/listen"
 	"os/user"
-	"strconv"
 	"sync"
 	"time"
 )
 
 type Host struct {
 	observation observationState
-	calls       chan struct{}
+	calls       listen.CallAdmission
 	listener    listen.Listener
 	owner       string
-	load        func(map[string]string) config.Config
+	load        func(map[string]string) (config.Config, error)
 	userPath    string
 	userStore   casapi.Store
 	// withoutMachine leaves the machine rung unread; see OmitMachineRung.
 	withoutMachine bool
 	editPolicy     EditPolicy
+	typedOptions   TypedOptions
 	ctx            context.Context
 	cancel         context.CancelFunc
 	closeOnce      sync.Once
@@ -81,7 +82,7 @@ func (h *Host) Serve(ctx context.Context) error {
 		return errors.New("config: host already served")
 	}
 	h.observation.serving = true
-	h.calls = make(chan struct{}, 64)
+	h.calls = listen.NewCallAdmission(64)
 	h.observation.mu.Unlock()
 	stop := context.AfterFunc(ctx, func() { h.Close() })
 	defer stop()
@@ -100,16 +101,14 @@ func (h *Host) Serve(ctx context.Context) error {
 			}
 			return err
 		}
-		select {
-		case h.calls <- struct{}{}:
-		default:
-			connection.Close()
+		release, admitted := h.calls.Take(connection)
+		if !admitted {
 			continue
 		}
 		h.workers.Add(1)
 		go func() {
 			defer h.workers.Done()
-			defer func() { <-h.calls }()
+			defer release()
 			defer connection.Close()
 			requestContext, cancel := context.WithTimeout(h.ctx, 35*time.Second)
 			defer cancel()
@@ -119,11 +118,15 @@ func (h *Host) Serve(ctx context.Context) error {
 			}
 			if err == nil {
 				receiver := &receiver{host: h, call: call, ctx: requestContext}
+				typed := &typedReceiver{receiver: receiver}
 				var reply []byte
 				reply, err = wire.ServeEndpoint(call.Frame, "openabstractions", "",
 					&wire.ConfigReaderDispatcher{Handler: receiver},
 					&wire.ConfigEditorDispatcher{Handler: receiver},
-					&wire.ConfigObserverDispatcher{Handler: receiver})
+					&wire.ConfigObserverDispatcher{Handler: receiver},
+					&wire.ConfigReaderV2Dispatcher{Handler: typed},
+					&wire.ConfigEditorV2Dispatcher{Handler: typed},
+					&wire.ConfigObserverV2Dispatcher{Handler: typed})
 				if err == nil {
 					err = call.Reply(reply)
 				}
@@ -147,18 +150,18 @@ func (r *receiver) Read(overrides wire.RunOverrides) (wire.Snapshot, error) {
 	}
 	overridesMap := map[string]string{"ABSTRACTION_NAS_STORE": overrides.NasStore, "ABSTRACTION_STORE": overrides.Store, "ABSTRACTION_LOG": overrides.LogSink, "ABSTRACTION_LOG_SERVICE": overrides.LogService}
 	var c config.Config
+	var err error
 	if r.host.load != nil {
-		c = r.host.load(overridesMap)
+		c, err = r.host.load(overridesMap)
 	} else {
-		var err error
 		machine := config.MachinePath()
 		if r.host.withoutMachine {
 			machine = ""
 		}
 		c, err = config.LoadWithSources(r.host.userStore, r.host.userPath, machine, overridesMap)
-		if err != nil {
-			return wire.Snapshot{}, &wire.ServiceError{Code: "storage_unavailable", Message: "user configuration could not be read"}
-		}
+	}
+	if err != nil {
+		return wire.Snapshot{}, &wire.ServiceError{Code: "storage_unavailable", Message: "configuration could not be read"}
 	}
 	origin := func(key string) wire.Origin { o := c.Origin(key); return wire.Origin{Rung: o.Rung, Path: o.Path} }
 	off := c.Off
@@ -173,17 +176,17 @@ func (r *receiver) authorize() error {
 	if err != nil {
 		return &wire.ServiceError{Code: "caller_unavailable", Message: "caller identity could not be rechecked"}
 	}
-	u, err := p.User.AtLeast(listen.Program.User)
-	if err != nil {
+	return r.host.authorizePeer(p)
+}
+
+func (h *Host) authorizePeer(p *identity.Peer) error {
+	// A negative POSIX uid names no account and is refused here as in every
+	// other service (identity ID-C7).
+	s, err := identity.SubjectOf(p, identity.Need{User: listen.Program.User})
+	if err != nil && !errors.Is(err, identity.ErrNoAccount) {
 		return &wire.ServiceError{Code: "identity_required", Message: "kernel user identity required"}
 	}
-	principal := ""
-	if u.Kind == "windows" {
-		principal = u.SID
-	} else if u.Kind == "posix" {
-		principal = strconv.Itoa(u.UID)
-	}
-	if principal == "" || principal != r.host.owner {
+	if err != nil || s.Account != h.owner {
 		return &wire.ServiceError{Code: "wrong_user", Message: "configuration service belongs to another user"}
 	}
 

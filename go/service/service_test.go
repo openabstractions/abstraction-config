@@ -99,7 +99,7 @@ func TestWrongUserRefusedBeforeProvider(t *testing.T) {
 	var reads atomic.Int32
 	_, c := host(t, func(h *Host) {
 		h.owner = "not-the-bound-principal"
-		h.load = func(map[string]string) config.Config { reads.Add(1); return config.Config{} }
+		h.load = func(map[string]string) (config.Config, error) { reads.Add(1); return config.Config{}, nil }
 	})
 	_, err := c.ReadWithOverrides(wire.RunOverrides{})
 	var refusal *wire.ServiceError
@@ -126,7 +126,7 @@ func TestUnknownFieldRefusedBeforeProvider(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	other.load = func(map[string]string) config.Config { reads.Add(1); return config.Config{} }
+	other.load = func(map[string]string) (config.Config, error) { reads.Add(1); return config.Config{}, nil }
 	defer other.Close()
 	done := make(chan error, 1)
 	go func() { done <- other.Serve(context.Background()) }()

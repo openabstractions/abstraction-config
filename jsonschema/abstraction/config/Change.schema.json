@@ -1,0 +1,97 @@
+{
+  "$defs": {
+    "Value": {
+      "additionalProperties": false,
+      "properties": {
+        "boolean": {
+          "type": "boolean"
+        },
+        "bytes": {
+          "maximum": 9223372036854775807,
+          "minimum": -9223372036854775808,
+          "type": "integer"
+        },
+        "choice": {
+          "pattern": "^[A-Za-z0-9_.-]*$",
+          "type": "string"
+        },
+        "duration_ms": {
+          "maximum": 9223372036854775807,
+          "minimum": -9223372036854775808,
+          "type": "integer"
+        },
+        "integer": {
+          "maximum": 9223372036854775807,
+          "minimum": -9223372036854775808,
+          "type": "integer"
+        },
+        "kind": {
+          "enum": [
+            "boolean",
+            "integer",
+            "bytes",
+            "duration",
+            "text",
+            "choice",
+            "text_list",
+            "text_map",
+            "unlimited"
+          ],
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 4096,
+          "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]*$",
+          "type": "string"
+        },
+        "text_list": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]*$",
+            "type": "string"
+          },
+          "maxItems": 128,
+          "type": "array"
+        },
+        "text_map": {
+          "additionalProperties": {
+            "maxLength": 512,
+            "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]*$",
+            "type": "string"
+          },
+          "maxProperties": 8,
+          "propertyNames": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_.-]*$",
+            "type": "string"
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "key": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_.-]*$",
+      "type": "string"
+    },
+    "set": {
+      "$ref": "#/$defs/Value"
+    }
+  },
+  "required": [
+    "key"
+  ],
+  "title": "Change",
+  "type": "object"
+}

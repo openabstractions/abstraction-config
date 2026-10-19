@@ -11,6 +11,7 @@ import (
 	"github.com/openabstractions/abstraction-identity/listen"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -109,4 +110,23 @@ func TestSelectedCASReaderEditorAndAuthorization(t *testing.T) {
 			t.Fatal("unauthorized caller reached storage")
 		}
 	}()
+}
+
+// The core trusted-source tests own trust-before-read and machineReadError.
+// This exercises the actual IPC receiver's common loader-error boundary; no
+// administrator-owned file or machine trust override is installed here.
+func TestReadLoaderErrorDoesNotExposePartialSettings(t *testing.T) {
+	requireProgramProof(t)
+	isolated(t)
+	sentinel := errors.New("controlled trusted-source read failure")
+	_, reader := host(t, func(h *Host) {
+		h.load = func(map[string]string) (config.Config, error) {
+			return config.Config{NASStore: "PARTIAL-MUST-NOT-ESCAPE", Store: "PARTIAL-MUST-NOT-ESCAPE"}, sentinel
+		}
+	})
+	got, err := reader.ReadWithOverrides(wire.RunOverrides{NasStore: "RUN-MUST-NOT-ESCAPE"})
+	var refusal *wire.ServiceError
+	if !errors.As(err, &refusal) || refusal.Code != "storage_unavailable" || !reflect.DeepEqual(got, wire.Snapshot{}) {
+		t.Fatalf("loader failure = %+v, %v", got, err)
+	}
 }

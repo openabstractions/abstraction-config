@@ -4,7 +4,9 @@ package client
 
 import (
 	"context"
+	"fmt"
 	wire "github.com/openabstractions/abstraction-config/go/abstraction/config"
+	"github.com/openabstractions/abstraction-facade/go-core/bootstrap"
 	"github.com/openabstractions/abstraction-identity/listen"
 	"os"
 	"time"
@@ -19,24 +21,65 @@ const EnvEndpoint = "ABSTRACTION_CONFIG_ENDPOINT"
 // replaces it.
 const DefaultTimeout = 2 * time.Second
 
+// ObserveMargin is the time an observation call has beyond its requested wait
+// to connect and carry the reply. An observation's call limit is its wait
+// plus this margin whenever the transport's own limit is shorter (CFG-W12),
+// so a long wait is never cut off by the two-second default.
+const ObserveMargin = 5 * time.Second
+
+// observeTransport is transport with a call limit that covers an
+// observation's wait of waitMS milliseconds.
+func observeTransport(transport listen.FrameClient, waitMS int64) listen.FrameClient {
+	if limit := time.Duration(waitMS)*time.Millisecond + ObserveMargin; waitMS > 0 && transport.Timeout < limit {
+		transport.Timeout = limit
+	}
+	return transport
+}
+
 type Snapshot = wire.Snapshot
 type RunOverrides = wire.RunOverrides
-type Client struct{ transport listen.FrameClient }
-
-func DefaultEndpoint() string {
-	if value := os.Getenv(EnvEndpoint); value != "" {
-		return value
-	}
-	return listen.Endpoint("config-v1")
+type Client struct {
+	transport listen.FrameClient
+	initErr   error
 }
-func Discover() *Client { return New(DefaultEndpoint()) }
+
+// DefaultEndpoint returns empty when the account namespace cannot be resolved.
+func DefaultEndpoint() string { endpoint, _ := checkedDefaultEndpoint(); return endpoint }
+func checkedDefaultEndpoint() (string, error) {
+	if endpoint := os.Getenv(EnvEndpoint); endpoint != "" {
+		return endpoint, nil
+	}
+	return bootstrap.InstalledEndpoint("config-v1")
+}
+func emptyEndpointError() error {
+	_, err := checkedDefaultEndpoint()
+	if err != nil {
+		return err
+	}
+	return fmt.Errorf("config: empty endpoint")
+}
+
+func Discover() *Client {
+	endpoint, err := checkedDefaultEndpoint()
+	c := New(endpoint)
+	c.initErr = err
+	return c
+}
 func New(endpoint string) *Client {
-	return NewWithTransport(listen.FrameClient{Endpoint: endpoint})
+	c := NewWithTransport(listen.FrameClient{Endpoint: endpoint})
+	if endpoint == "" {
+		c.initErr = emptyEndpointError()
+	}
+	return c
 }
 
 // NewWithTransport retains the caller's endpoint, server trust and waiting limits.
 func NewWithTransport(transport listen.FrameClient) *Client {
-	return &Client{transport: transport.WithDefaults(DefaultTimeout, 1<<20)}
+	c := &Client{transport: transport.WithDefaults(DefaultTimeout, 1<<20)}
+	if transport.Endpoint == "" && transport.Dialer == nil {
+		c.initErr = emptyEndpointError()
+	}
+	return c
 }
 
 // Read captures this caller's existing run overrides at call time. Empty values
@@ -55,6 +98,9 @@ func (c *Client) ReadWithOverrides(overrides RunOverrides) (Snapshot, error) {
 
 // ReadWithOverridesContext uses ctx only for this operation.
 func (c *Client) ReadWithOverridesContext(ctx context.Context, overrides RunOverrides) (Snapshot, error) {
+	if c.initErr != nil {
+		return Snapshot{}, c.initErr
+	}
 	if err := ctx.Err(); err != nil {
 		return Snapshot{}, err
 	}

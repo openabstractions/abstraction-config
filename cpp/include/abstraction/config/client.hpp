@@ -1,18 +1,13 @@
 #pragma once
 #include <abstraction/config/rec.h>
 #include <abstraction/ipc/frame.hpp>
+#include <abstraction/facade/bootstrap.hpp>
 #include <cstdlib>
 #include <optional>
 namespace abstraction::config {
 inline std::string default_endpoint() {
  if(const char* value=std::getenv("ABSTRACTION_CONFIG_ENDPOINT")){if(*value)return value;}
-#ifdef _WIN32
- return R"(\\.\pipe\openabstractions-config-v1)";
-#else
- if(const char* value=std::getenv("XDG_RUNTIME_DIR")){if(*value)return std::string(value)+"/openabstractions-config-v1.sock";}
- const char* temp=std::getenv("TMPDIR");const char* user=std::getenv("USER");
- return std::string(temp&&*temp?temp:"/tmp")+"/openabstractions-config-v1-"+(user?user:"")+".sock";
-#endif
+ return abstraction::facade::bootstrap::installed_endpoint("config-v1");
 }
 // Read-only capability client. Never reads configuration files or starts a provider.
 class Client {
@@ -28,8 +23,8 @@ public:
   return read_with_overrides(overrides);
  }
  Snapshot read_with_overrides(const RunOverrides& overrides)const {
-  auto transport=deadline_?ipc::FrameTransport(endpoint_,*deadline_,1<<20)
-                          :ipc::FrameTransport(endpoint_,2000,1<<20);
+  auto transport=deadline_?ipc::FrameTransport(endpoint_,*deadline_,ipc::kDefaultMaxFrame)
+                          :ipc::FrameTransport(endpoint_,2000,ipc::kDefaultMaxFrame);
   transport = transport.with_cancellation(cancellation_).with_server_expectation(server_);
   ConfigReaderClient<ipc::FrameTransport> client(transport);
   return client.read(overrides);

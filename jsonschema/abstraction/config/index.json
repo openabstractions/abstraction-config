@@ -1,0 +1,29 @@
+{
+  "document": "Snapshot.schema.json",
+  "records": [
+    "Change.schema.json",
+    "ConfigObservation.schema.json",
+    "ConfigObservationV2.schema.json",
+    "ConfigSource.schema.json",
+    "DescribeResult.schema.json",
+    "Entry.schema.json",
+    "IgnoredField.schema.json",
+    "KeyDescriptor.schema.json",
+    "KeyOrigin.schema.json",
+    "KeyProblem.schema.json",
+    "KeyRefusal.schema.json",
+    "Origin.schema.json",
+    "Origins.schema.json",
+    "ReadResult.schema.json",
+    "RunOverrides.schema.json",
+    "Snapshot.schema.json",
+    "UserReadResultV2.schema.json",
+    "UserReplaceResult.schema.json",
+    "UserReplaceResultV2.schema.json",
+    "UserSettings.schema.json",
+    "UserSnapshot.schema.json",
+    "UserSnapshotV2.schema.json",
+    "Value.schema.json",
+    "ValueRange.schema.json"
+  ]
+}

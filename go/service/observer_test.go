@@ -52,8 +52,12 @@ func waitConfigObservers(t *testing.T, h *Host, n int) {
 	deadline := time.Now().Add(3 * time.Second)
 	for {
 		h.observation.mu.Lock()
-		count := len(h.observation.slots)
+		gate := h.observation.gate
 		h.observation.mu.Unlock()
+		count := 0
+		if gate != nil {
+			count = gate.Waiting()
+		}
 		if count == n {
 			return
 		}
@@ -138,10 +142,10 @@ func TestConfigObserverDisconnectCapacityDeadlineShutdown(t *testing.T) {
 	var mu sync.Mutex
 	value := "initial"
 	h, c, _ := observerHost(t, func(h *Host) {
-		h.load = func(map[string]string) config.Config {
+		h.load = func(map[string]string) (config.Config, error) {
 			mu.Lock()
 			defer mu.Unlock()
-			return config.Config{Store: value}
+			return config.Config{Store: value}, nil
 		}
 		if e := h.EnableObservation(func(context.Context) (<-chan struct{}, func(), error) { return changes, func() {}, nil }); e != nil {
 			t.Fatal(e)
@@ -226,6 +230,46 @@ func TestConfigObserverUnsupportedAndInvalid(t *testing.T) {
 	if _, e = c.ObserveContext(ctx, wire.RunOverrides{}, "", 30000); !errors.Is(e, context.Canceled) {
 		t.Fatal(e)
 	}
+}
+
+func TestConfigObserverGeneratedPagesCancelAndBreak(t *testing.T) {
+	isolated(t)
+	changes := make(chan struct{})
+	h, c, _ := observerHost(t, func(h *Host) {
+		if e := h.EnableObservation(func(context.Context) (<-chan struct{}, func(), error) { return changes, func() {}, nil }); e != nil {
+			t.Fatal(e)
+		}
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pages := c.ObservePagesContext(ctx, wire.RunOverrides{}, "", 30000)
+	count := 0
+	pages(func(page wire.ConfigObservation, e error) bool {
+		count++
+		if e != nil || page.Snapshot == nil || page.Cursor == "" {
+			t.Fatal(page, e)
+		}
+		return false
+	})
+	if count != 1 {
+		t.Fatal(count)
+	}
+	waitConfigObservers(t, h, 0)
+	done := make(chan error, 1)
+	go func() {
+		pages(func(_ wire.ConfigObservation, e error) bool { done <- e; return false })
+	}()
+	waitConfigObservers(t, h, 1)
+	cancel()
+	select {
+	case e := <-done:
+		if !errors.Is(e, context.Canceled) {
+			t.Fatal(e)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("generated observation did not cancel")
+	}
+	waitConfigObservers(t, h, 0)
 }
 
 func TestConfigObserverSelectedStoreRequiresItsOwnSource(t *testing.T) {

@@ -9,10 +9,14 @@ import (
 	"errors"
 	config "github.com/openabstractions/abstraction-config/go"
 	wire "github.com/openabstractions/abstraction-config/go/abstraction/config"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
+
+	watch "github.com/openabstractions/abstraction-watch/go"
 )
 
 // ObservationSource supplies invalidations for this host's selected provider,
@@ -24,10 +28,10 @@ type observationState struct {
 	serving, initialized, failed bool
 	source                       ObservationSource
 	epoch                        string
-	changed                      chan struct{}
-	slots                        chan struct{}
+	gate                         *watch.Gate
 	stop                         func()
 	done                         chan struct{}
+	typedGood                    map[string]typedGoodSnapshot
 }
 
 // EnableObservation selects a matching trusted provider notification source.
@@ -49,14 +53,36 @@ func (h *Host) ObservationAvailable() bool {
 	defer h.observation.mu.Unlock()
 	return h.ctx.Err() == nil && h.observation.source != nil && !h.observation.failed
 }
+
+// The service creates its user location's directory before observing, so an
+// empty profile is observable at once (CFG-W6).
 func configureFileObservation(h *Host) {
+	path := h.userPath
 	_ = h.EnableObservation(func(ctx context.Context) (<-chan struct{}, func(), error) {
-		subscription, e := config.WatchInvalidations()
-		if e != nil {
+		if e := os.MkdirAll(filepath.Dir(path), 0o700); e != nil {
 			return nil, nil, e
 		}
-		return subscription.Changes(), func() { subscription.Close() }, nil
+		return subscribed(config.WatchInvalidations())
 	})
+}
+
+// FileObservation is the source for a host whose selected store is one file
+// at path, such as a runtime's state-directory store. It creates the file's
+// directory and reports native notification on it.
+func FileObservation(path string) ObservationSource {
+	return func(ctx context.Context) (<-chan struct{}, func(), error) {
+		if e := os.MkdirAll(filepath.Dir(path), 0o700); e != nil {
+			return nil, nil, e
+		}
+		return subscribed(config.WatchFile(path))
+	}
+}
+
+func subscribed(subscription *config.InvalidationSubscription, e error) (<-chan struct{}, func(), error) {
+	if e != nil {
+		return nil, nil, e
+	}
+	return subscription.Changes(), func() { subscription.Close() }, nil
 }
 
 // PrepareObservation establishes the configured notification source before a
@@ -85,8 +111,7 @@ func (h *Host) startObservation() bool {
 		return false
 	}
 	o.epoch = hex.EncodeToString(epoch[:])
-	o.changed = make(chan struct{})
-	o.slots = make(chan struct{}, 32)
+	o.gate = watch.NewGate(watch.DefaultWaiters)
 	changes, stop, e := o.source(h.ctx)
 	if e != nil || changes == nil || stop == nil {
 		if stop != nil {
@@ -97,26 +122,32 @@ func (h *Host) startObservation() bool {
 	}
 	o.stop = stop
 	o.done = make(chan struct{})
+	var restartChanges <-chan struct{}
+	if h.typedOptions.RestartState != nil {
+		_, restartChanges = h.typedOptions.RestartState.snapshot()
+	}
 	go func() {
 		defer close(o.done)
 		for {
 			select {
 			case <-h.ctx.Done():
 				return
+			case <-restartChanges:
+				_, restartChanges = h.typedOptions.RestartState.snapshot()
+				o.gate.Advance()
 			case _, ok := <-changes:
+				if ok {
+					o.gate.Advance()
+					continue
+				}
 				o.mu.Lock()
-				close(o.changed)
-				o.changed = make(chan struct{})
-				if !ok {
-					o.failed = true
-				}
+				o.failed = true
 				o.mu.Unlock()
-				if !ok {
-					if h.OnObservationStopped != nil {
-						h.OnObservationStopped()
-					}
-					return
+				o.gate.Fail(errors.New("config: observation source ended"))
+				if h.OnObservationStopped != nil {
+					h.OnObservationStopped()
 				}
+				return
 			}
 		}
 	}()
@@ -183,55 +214,28 @@ func (r *receiver) Observe(overrides wire.RunOverrides, cursor string, waitMS in
 			return refusal(wire.ConfigObservationOutcomeGap)
 		}
 	}
-	waitCtx := r.call.WaitContext()
-	timer := time.NewTimer(time.Duration(waitMS) * time.Millisecond)
-	defer timer.Stop()
-	expired := waitMS == 0
-	held := false
-	defer func() {
-		if held {
-			<-o.slots
-		}
-	}()
-	for {
-		if e := waitCtx.Err(); e != nil {
-			return wire.ConfigObservation{}, e
-		}
-		o.mu.Lock()
-		changed, failed := o.changed, o.failed
-		o.mu.Unlock()
-		if failed {
-			return refusal(wire.ConfigObservationOutcomeUnavailable)
-		}
-		snapshot, e := r.Read(overrides)
-		if e != nil {
-			return wire.ConfigObservation{}, e
-		}
-		sum := sha256.Sum256(wire.Encode(&snapshot))
-		next := o.epoch + ":" + binding + ":" + hex.EncodeToString(sum[:])
-		if e = r.authorize(); e != nil {
-			return wire.ConfigObservation{}, e
-		}
-		if next != cursor {
-			return wire.ConfigObservation{Outcome: wire.ConfigObservationOutcomeSnapshot, Cursor: next, Snapshot: &snapshot}, nil
-		}
-		if expired {
-			return refusal(wire.ConfigObservationOutcomeUnchanged)
-		}
-		if !held {
-			select {
-			case o.slots <- struct{}{}:
-				held = true
-			default:
-				return refusal(wire.ConfigObservationOutcomeUnavailable)
+	var answer wire.ConfigObservation
+	outcome, e := o.gate.Wait(r.call.WaitContext(), time.Duration(waitMS)*time.Millisecond, watch.Probe{
+		Read: func() (bool, error) {
+			snapshot, e := r.Read(overrides)
+			if e != nil {
+				return false, e
 			}
-		}
-		select {
-		case <-waitCtx.Done():
-			return wire.ConfigObservation{}, waitCtx.Err()
-		case <-timer.C:
-			expired = true
-		case <-changed:
-		}
+			sum := sha256.Sum256(wire.Encode(&snapshot))
+			next := o.epoch + ":" + binding + ":" + hex.EncodeToString(sum[:])
+			answer = wire.ConfigObservation{Outcome: wire.ConfigObservationOutcomeSnapshot, Cursor: next, Snapshot: &snapshot}
+			return next != cursor, nil
+		},
+		Recheck: r.authorize,
+	})
+	if e != nil {
+		return wire.ConfigObservation{}, e
 	}
+	switch outcome {
+	case watch.Answered:
+		return answer, nil
+	case watch.Unchanged:
+		return refusal(wire.ConfigObservationOutcomeUnchanged)
+	}
+	return refusal(wire.ConfigObservationOutcomeUnavailable)
 }

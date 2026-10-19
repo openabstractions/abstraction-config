@@ -5,6 +5,8 @@ from __future__ import annotations
 import dataclasses
 import enum
 
+from abstraction.rights.api import _codec as _dependency_rights
+
 _HEX = b"0123456789abcdef"
 _WS = (0x20, 0x09, 0x0A, 0x0D)
 _SHORT = {0x22: b'\\"', 0x5C: b"\\\\", 0x08: b"\\b", 0x0C: b"\\f",
@@ -45,53 +47,9 @@ def _strs(out, v, depth):
 
 
 def _raw(out, s, depth):
-    b = s.encode("utf-8") if isinstance(s, str) else s
-    i, n = 0, len(b)
-    while i < n:
-        c = b[i]
-        if c in _WS:
-            i += 1
-        elif c == 0x22:
-            j = i + 1
-            while j < n:
-                if b[j] == 0x5C:
-                    j += 2
-                    continue
-                if b[j] == 0x22:
-                    j += 1
-                    break
-                j += 1
-            out += b[i:j]
-            i = j
-        elif c in (0x7B, 0x5B):
-            out.append(c)
-            i += 1
-            j = i
-            while j < n and b[j] in _WS:
-                j += 1
-            if j < n and b[j] in (0x7D, 0x5D):
-                out.append(b[j])
-                i = j + 1
-            else:
-                depth += 1
-                out += b"\n"
-                _pad(out, depth)
-        elif c in (0x7D, 0x5D):
-            depth -= 1
-            out += b"\n"
-            _pad(out, depth)
-            out.append(c)
-            i += 1
-        elif c == 0x2C:
-            out += b",\n"
-            _pad(out, depth)
-            i += 1
-        elif c == 0x3A:
-            out += b": "
-            i += 1
-        else:
-            out.append(c)
-            i += 1
+    # An opaque value's bytes as they are ([DEF-A3]).
+    # Whitespace around the value is not part of it.
+    out += (s.encode("utf-8") if isinstance(s, str) else bytes(s)).strip(bytes(_WS))
 
 
 def _rawmap(out, m, depth):
@@ -136,6 +94,23 @@ def _strmap(out, m, depth):
     out += b"}"
 
 
+def _write_list(out, v, depth, enc):
+    if not v:
+        out += b"[]"
+        return
+    out += b"[\n"
+    for i, x in enumerate(v):
+        _pad(out, depth + 1)
+        enc(out, x, depth + 1)
+        if i + 1 < len(v):
+            out += b","
+        out += b"\n"
+    _pad(out, depth)
+    out += b"]"
+
+_Imported0 = _dependency_rights.RefusalDetail
+
+
 try:
     from enum import StrEnum as _StrEnum
 except ImportError:  # Python 3.10
@@ -176,6 +151,79 @@ class ConfigObservationOutcome(_StrEnum):
     INVALID = "invalid"
 
 
+class ValueKind(_StrEnum):
+    BOOLEAN = "boolean"
+    INTEGER = "integer"
+    BYTES = "bytes"
+    DURATION = "duration"
+    TEXT = "text"
+    CHOICE = "choice"
+    TEXT_LIST = "text_list"
+    TEXT_MAP = "text_map"
+    UNLIMITED = "unlimited"
+
+
+class Location(_StrEnum):
+    MACHINE = "machine"
+    USER = "user"
+    PROCESS = "process"
+
+
+class KeyState(_StrEnum):
+    SET = "set"
+    DEFAULT = "default"
+    LOCKED = "locked"
+    IGNORED = "ignored"
+    PENDING = "pending"
+
+
+class ApplyMode(_StrEnum):
+    LIVE = "live"
+    RESTART = "restart"
+
+
+class KeyRefusalReason(_StrEnum):
+    NOT_GRANTED = "not_granted"
+    UNKNOWN_KEY = "unknown_key"
+
+
+class ReadOutcome(_StrEnum):
+    READ = "read"
+    CORRUPT = "corrupt"
+    NOT_PERMITTED = "not_permitted"
+    UNAVAILABLE = "unavailable"
+    INVALID = "invalid"
+    FORBIDDEN = "forbidden"
+
+
+class IgnoredFieldReason(_StrEnum):
+    UNKNOWN_KEY = "unknown_key"
+    INVALID_NAME = "invalid_name"
+
+
+class ReplaceOutcome(_StrEnum):
+    APPLIED = "applied"
+    CONFLICT = "conflict"
+    NOT_PERMITTED = "not_permitted"
+    INVALID = "invalid"
+    UNAVAILABLE = "unavailable"
+    CORRUPT = "corrupt"
+    FORBIDDEN = "forbidden"
+
+
+class ObservationOutcomeV2(_StrEnum):
+    CHANGED = "changed"
+    UNCHANGED = "unchanged"
+    GAP = "gap"
+    UNAVAILABLE = "unavailable"
+    UNSUPPORTED = "unsupported"
+    INVALID = "invalid"
+    NOT_PERMITTED = "not_permitted"
+    CORRUPT = "corrupt"
+    FORBIDDEN = "forbidden"
+    FAILED = "failed"
+
+
 class ServiceErrorCode(_StrEnum):
     HANDLER_ERROR = "handler_error"
     INVALID_RESULT = "invalid_result"
@@ -194,6 +242,9 @@ READER_ERROR_CODES = ["storage_unavailable", "caller_unavailable", "identity_req
 
 
 EDITOR_ERROR_CODES = ["invalid_revision", "storage_unavailable", "caller_unavailable", "identity_required", "wrong_user"]
+
+
+RESOURCE_ACTIONS = ["abstraction.config/key.read", "abstraction.config/user.replace"]
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -293,6 +344,207 @@ class ConfigObservation:
 
 
 @dataclasses.dataclass(kw_only=True)
+class Value:
+    """The tag carries value presence, including false, zero and empty
+    text/list/map. Every payload other than the field selected by kind is zero.
+    The runtime validates this invariant on changes and stored values; generated
+    generic client parsers apply the same invariant. Unset is an absent
+    Entry.value or Change.set, never a zero payload."""
+
+    kind: ValueKind | None = None
+    boolean: bool = False
+    integer: int = 0
+    bytes: int = 0
+    duration_ms: int = 0
+    text: str = ""
+    choice: str = ""
+    text_list: list[str] = dataclasses.field(default_factory=list)
+    text_map: dict[str, str] = dataclasses.field(default_factory=dict)
+
+
+@dataclasses.dataclass(kw_only=True)
+class ConfigSource:
+    location: Location | None = None
+    path: str = ""
+
+
+@dataclasses.dataclass(kw_only=True)
+class KeyOrigin:
+    """Per-key effective location and state. Paths are diagnostic and grant no
+    storage access. A lockable key set in a trusted machine file is locked and
+    wins over user and process values. Shadowed lists farther settings that also
+    supplied the key."""
+
+    location: Location | None = None
+    path: str = ""
+    state: KeyState | str = ""
+    reason: str = ""
+    shadowed: list[ConfigSource] = dataclasses.field(default_factory=list)
+
+
+@dataclasses.dataclass(kw_only=True)
+class Entry:
+    """A known key. Absent value means unset, with its catalogue default applying
+    when present. Unknown or unauthorized keys occur only in ReadResult.refused."""
+
+    key: str = ""
+    value: Value | None = None
+    origin: KeyOrigin = dataclasses.field(default_factory=KeyOrigin)
+
+
+@dataclasses.dataclass(kw_only=True)
+class ValueRange:
+    min: int = 0
+    max: int = 0
+
+
+@dataclasses.dataclass(kw_only=True)
+class KeyDescriptor:
+    """Definition-owned key metadata from keys.json, validated by this record's
+    generated schema and emitted as one bounded catalogue constant. Range
+    applies to integer, bytes and duration; choices to choice. No key is a wire
+    record field. default_description explains an existing provider-computed
+    default."""
+
+    key: str = ""
+    kind: ValueKind | None = None
+    default: Value | None = None
+    range: ValueRange | None = None
+    choices: list[str] = dataclasses.field(default_factory=list)
+    presets: list[Value] = dataclasses.field(default_factory=list)
+    description: str = ""
+    group: str = ""
+    apply: ApplyMode | None = None
+    lockable: bool = False
+    lowest_location: Location | None = None
+    deprecated: str = ""
+    default_description: str = ""
+    allows_unlimited: bool = False
+
+
+@dataclasses.dataclass(kw_only=True)
+class Change:
+    """Set one typed user value or unset it when set is absent. A batch applies all
+    changes or none under its compared user-content revision."""
+
+    key: str = ""
+    set: Value | None = None
+
+
+@dataclasses.dataclass(kw_only=True)
+class KeyRefusal:
+    key: str = ""
+    reason: KeyRefusalReason | None = None
+    refusal: _dependency_rights.RefusalDetail | None = None
+
+
+@dataclasses.dataclass(kw_only=True)
+class KeyProblem:
+    """A bounded key-specific diagnostic. It contains no supplied value or
+    credential. Locked edits use locked:machine; invalid edits name unknown_key,
+    wrong_kind, out_of_range or invalid_value."""
+
+    key: str = ""
+    reason: str = ""
+
+
+@dataclasses.dataclass(kw_only=True)
+class IgnoredField:
+    """A bounded display-only excerpt of an ignored stored member name. The
+    zero-based offset locates its original bytes; the excerpt is sanitized
+    UTF-8, at most 64 bytes, with an ellipsis when cut. It is never a key,
+    selector or authority."""
+
+    offset: int = 0
+    name_excerpt: str = ""
+    reason: IgnoredFieldReason | str = ""
+    source: ConfigSource = dataclasses.field(default_factory=ConfigSource)
+
+
+@dataclasses.dataclass(kw_only=True)
+class ReadResult:
+    """Successful entries and per-key refusals are disjoint. revision is the
+    effective-content digest including provenance/state. A malformed known
+    stored value is ignored with invalid_value and the default value. An
+    unparseable record gives corrupt with its zero-based first failing byte
+    offset; outcome carries offset presence including zero. Storage I/O gives
+    unavailable. Non-read outcomes disclose no entries or revision."""
+
+    outcome: ReadOutcome | None = None
+    entries: list[Entry] = dataclasses.field(default_factory=list)
+    revision: str = ""
+    refused: list[KeyRefusal] = dataclasses.field(default_factory=list)
+    problem: KeyProblem | None = None
+    corrupt_offset: int = 0
+    ignored_fields: list[IgnoredField] = dataclasses.field(default_factory=list)
+    ignored_omitted: int = 0
+    corrupt_source: ConfigSource | None = None
+    refusal: _dependency_rights.RefusalDetail | None = None
+
+
+@dataclasses.dataclass(kw_only=True)
+class UserSnapshotV2:
+    """Only persisted user values, with a normalized-content revision distinct from
+    the effective revision. Legacy @1-only fields are preserved in the same
+    store and are absent from this projection."""
+
+    entries: list[Entry] = dataclasses.field(default_factory=list)
+    revision: str = ""
+
+
+@dataclasses.dataclass(kw_only=True)
+class UserReadResultV2:
+    outcome: ReadOutcome | None = None
+    snapshot: UserSnapshotV2 | None = None
+    problem: KeyProblem | None = None
+    corrupt_offset: int = 0
+    refusal: _dependency_rights.RefusalDetail | None = None
+
+
+@dataclasses.dataclass(kw_only=True)
+class UserReplaceResultV2:
+    """Applied and conflict carry the current user snapshot; every other outcome
+    omits snapshot and discloses no user state. A locked key is not_permitted
+    with locked:machine. Unknown/wrong-kind/out-of-range values are invalid.
+    Refusal writes nothing. A canceled wait leaves outcome unresolved; reread
+    before retrying."""
+
+    outcome: ReplaceOutcome | None = None
+    snapshot: UserSnapshotV2 | None = None
+    refused: list[KeyProblem] = dataclasses.field(default_factory=list)
+    corrupt_offset: int = 0
+    refusal: _dependency_rights.RefusalDetail | None = None
+
+
+@dataclasses.dataclass(kw_only=True)
+class ConfigObservationV2:
+    """One latest effective snapshot. Values, lock state and restart-pending state
+    invalidate the revision. No process overrides cross the wire or bind this
+    cursor. Restart gives gap. Unchanged carries the original cursor and no
+    snapshot."""
+
+    outcome: ObservationOutcomeV2 | None = None
+    cursor: str = ""
+    snapshot: ReadResult | None = None
+    problem: KeyProblem | None = None
+    corrupt_offset: int = 0
+    corrupt_source: ConfigSource | None = None
+    refusal: _dependency_rights.RefusalDetail | None = None
+    age_ms: int | None = None
+    cause: str = ""
+
+
+@dataclasses.dataclass(kw_only=True)
+class DescribeResult:
+    """read carries the complete bounded catalogue; every refusal carries an empty
+    list. CFG-S3 declares the bounded-catalogue paging divergence."""
+
+    outcome: ReadOutcome | None = None
+    descriptors: list[KeyDescriptor] = dataclasses.field(default_factory=list)
+    refusal: _dependency_rights.RefusalDetail | None = None
+
+
+@dataclasses.dataclass(kw_only=True)
 class _ConfigReaderReadArguments:
     overrides: RunOverrides = dataclasses.field(default_factory=RunOverrides)
 
@@ -311,6 +563,33 @@ class _ConfigEditorReplaceUserArguments:
 @dataclasses.dataclass(kw_only=True)
 class _ConfigObserverObserveArguments:
     overrides: RunOverrides = dataclasses.field(default_factory=RunOverrides)
+    cursor: str = ""
+    wait_ms: int = 0
+
+
+@dataclasses.dataclass(kw_only=True)
+class _ConfigReaderV2ReadArguments:
+    names: list[str] = dataclasses.field(default_factory=list)
+
+
+@dataclasses.dataclass(kw_only=True)
+class _ConfigReaderV2DescribeArguments:
+    pass
+
+
+@dataclasses.dataclass(kw_only=True)
+class _ConfigEditorV2ReadUserArguments:
+    pass
+
+
+@dataclasses.dataclass(kw_only=True)
+class _ConfigEditorV2ReplaceUserArguments:
+    expected_revision: str = ""
+    changes: list[Change] = dataclasses.field(default_factory=list)
+
+
+@dataclasses.dataclass(kw_only=True)
+class _ConfigObserverV2ObserveArguments:
     cursor: str = ""
     wait_ms: int = 0
 
@@ -356,6 +635,31 @@ class _ConfigEditorReplaceUserResult:
 @dataclasses.dataclass(kw_only=True)
 class _ConfigObserverObserveResult:
     value: ConfigObservation = dataclasses.field(default_factory=ConfigObservation)
+
+
+@dataclasses.dataclass(kw_only=True)
+class _ConfigReaderV2ReadResult:
+    value: ReadResult = dataclasses.field(default_factory=ReadResult)
+
+
+@dataclasses.dataclass(kw_only=True)
+class _ConfigReaderV2DescribeResult:
+    value: DescribeResult = dataclasses.field(default_factory=DescribeResult)
+
+
+@dataclasses.dataclass(kw_only=True)
+class _ConfigEditorV2ReadUserResult:
+    value: UserReadResultV2 = dataclasses.field(default_factory=UserReadResultV2)
+
+
+@dataclasses.dataclass(kw_only=True)
+class _ConfigEditorV2ReplaceUserResult:
+    value: UserReplaceResultV2 = dataclasses.field(default_factory=UserReplaceResultV2)
+
+
+@dataclasses.dataclass(kw_only=True)
+class _ConfigObserverV2ObserveResult:
+    value: ConfigObservationV2 = dataclasses.field(default_factory=ConfigObservationV2)
 
 
 def _write_run_overrides(out, v, depth):
@@ -589,6 +893,877 @@ def _write_config_observation(out, v, depth):
     out += b"}"
 
 
+def _write_value(out, v, depth):
+    encoded_counter = _CompactEncodedCounter(len(out))
+    if isinstance(v.text, str):
+        _size = len(v.text.encode("utf-8", "surrogatepass"))
+        if _size > 4096: raise Refusal("bad_value", 0)
+    if isinstance(v.text, str) and any(c < "\x20" or "\x7f" <= c <= "\x9f" for c in v.text): raise Refusal("bad_value", 0)
+    if isinstance(v.choice, str):
+        _size = len(v.choice.encode("utf-8", "surrogatepass"))
+        if _size != 0 and (_size < 1 or _size > 64): raise Refusal("bad_value", 0)
+    if isinstance(v.choice, str) and not all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-" for c in v.choice): raise Refusal("bad_value", 0)
+    if isinstance(v.text_list, list):
+        _size = len(v.text_list)
+        if _size > 128: raise Refusal("bad_value", 0)
+    if isinstance(v.text_list, list):
+        for oa_element in v.text_list:
+            if isinstance(oa_element, str):
+                _size = len(oa_element.encode("utf-8", "surrogatepass"))
+                if _size < 1 or _size > 128: raise Refusal("bad_value", 0)
+    if isinstance(v.text_list, list):
+        for oa_element in v.text_list:
+            if isinstance(oa_element, str) and any(c < "\x20" or "\x7f" <= c <= "\x9f" for c in oa_element): raise Refusal("bad_value", 0)
+    if isinstance(v.text_map, dict):
+        _size = len(v.text_map)
+        if _size > 8: raise Refusal("bad_value", 0)
+    if isinstance(v.text_map, dict):
+        for oa_element in v.text_map:
+            if isinstance(oa_element, str):
+                _size = len(oa_element.encode("utf-8", "surrogatepass"))
+                if _size < 1 or _size > 64: raise Refusal("bad_value", 0)
+    if isinstance(v.text_map, dict):
+        for oa_element in v.text_map:
+            if isinstance(oa_element, str) and not all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-" for c in oa_element): raise Refusal("bad_value", 0)
+    if isinstance(v.text_map, dict):
+        for oa_element in v.text_map.values():
+            if isinstance(oa_element, str):
+                _size = len(oa_element.encode("utf-8", "surrogatepass"))
+                if _size > 512: raise Refusal("bad_value", 0)
+    if isinstance(v.text_map, dict):
+        for oa_element in v.text_map.values():
+            if isinstance(oa_element, str) and any(c < "\x20" or "\x7f" <= c <= "\x9f" for c in oa_element): raise Refusal("bad_value", 0)
+    _closed_enum(ValueKind, v.kind)
+    out += b"{"
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "kind")
+    out += b": "
+    _esc(out, v.kind)
+    encoded_counter.check(out, 262144)
+    if v.boolean:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "boolean")
+        out += b": "
+        out += b"true" if v.boolean else b"false"
+    encoded_counter.check(out, 262144)
+    if v.integer != 0:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "integer")
+        out += b": "
+        _num(out, v.integer)
+    encoded_counter.check(out, 262144)
+    if v.bytes != 0:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "bytes")
+        out += b": "
+        _num(out, v.bytes)
+    encoded_counter.check(out, 262144)
+    if v.duration_ms != 0:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "duration_ms")
+        out += b": "
+        _num(out, v.duration_ms)
+    encoded_counter.check(out, 262144)
+    if v.text:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "text")
+        out += b": "
+        _esc(out, v.text)
+    encoded_counter.check(out, 262144)
+    if v.choice:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "choice")
+        out += b": "
+        _esc(out, v.choice)
+    encoded_counter.check(out, 262144)
+    if v.text_list:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "text_list")
+        out += b": "
+        _strs(out, v.text_list, depth + 1)
+    encoded_counter.check(out, 262144)
+    if v.text_map:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "text_map")
+        out += b": "
+        _strmap(out, v.text_map, depth + 1)
+    encoded_counter.check(out, 262144)
+    out += b"\n"
+    _pad(out, depth)
+    out += b"}"
+    encoded_counter.check(out, 262144)
+
+
+def _write_config_source(out, v, depth):
+    if isinstance(v.path, str):
+        _size = len(v.path.encode("utf-8", "surrogatepass"))
+        if _size > 4096: raise Refusal("bad_value", 0)
+    if isinstance(v.path, str) and any(c < "\x20" or "\x7f" <= c <= "\x9f" for c in v.path): raise Refusal("bad_value", 0)
+    _closed_enum(Location, v.location)
+    out += b"{"
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "location")
+    out += b": "
+    _esc(out, v.location)
+    out += b","
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "path")
+    out += b": "
+    _esc(out, v.path)
+    out += b"\n"
+    _pad(out, depth)
+    out += b"}"
+
+
+def _write_key_origin(out, v, depth):
+    if isinstance(v.path, str):
+        _size = len(v.path.encode("utf-8", "surrogatepass"))
+        if _size > 4096: raise Refusal("bad_value", 0)
+    if isinstance(v.path, str) and any(c < "\x20" or "\x7f" <= c <= "\x9f" for c in v.path): raise Refusal("bad_value", 0)
+    if isinstance(v.reason, str):
+        _size = len(v.reason.encode("utf-8", "surrogatepass"))
+        if _size > 512: raise Refusal("bad_value", 0)
+    if isinstance(v.reason, str) and any(c < "\x20" or "\x7f" <= c <= "\x9f" for c in v.reason): raise Refusal("bad_value", 0)
+    if isinstance(v.shadowed, list):
+        _size = len(v.shadowed)
+        if _size > 3: raise Refusal("bad_value", 0)
+    if v.location:
+        _closed_enum(Location, v.location)
+    if not isinstance(v.state, str):
+        raise Refusal("wrong_type", 0)
+    out += b"{"
+    first = True
+    if v.location:
+        first = False
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "location")
+        out += b": "
+        _esc(out, v.location)
+    if not first:
+        out += b","
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "path")
+    out += b": "
+    _esc(out, v.path)
+    out += b","
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "state")
+    out += b": "
+    _esc(out, v.state)
+    if v.reason:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "reason")
+        out += b": "
+        _esc(out, v.reason)
+    if v.shadowed:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "shadowed")
+        out += b": "
+        _write_list(out, v.shadowed, depth + 1, _write_config_source)
+    out += b"\n"
+    _pad(out, depth)
+    out += b"}"
+
+
+def _write_entry(out, v, depth):
+    if isinstance(v.key, str):
+        _size = len(v.key.encode("utf-8", "surrogatepass"))
+        if _size < 1 or _size > 64: raise Refusal("bad_value", 0)
+    if isinstance(v.key, str) and not all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-" for c in v.key): raise Refusal("bad_value", 0)
+    out += b"{"
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "key")
+    out += b": "
+    _esc(out, v.key)
+    if v.value is not None:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "value")
+        out += b": "
+        _write_value(out, v.value, depth + 1)
+    out += b","
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "origin")
+    out += b": "
+    _write_key_origin(out, v.origin, depth + 1)
+    out += b"\n"
+    _pad(out, depth)
+    out += b"}"
+
+
+def _write_value_range(out, v, depth):
+    out += b"{"
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "min")
+    out += b": "
+    _num(out, v.min)
+    out += b","
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "max")
+    out += b": "
+    _num(out, v.max)
+    out += b"\n"
+    _pad(out, depth)
+    out += b"}"
+
+
+def _write_key_descriptor(out, v, depth):
+    encoded_counter = _CompactEncodedCounter(len(out))
+    if isinstance(v.key, str):
+        _size = len(v.key.encode("utf-8", "surrogatepass"))
+        if _size < 1 or _size > 64: raise Refusal("bad_value", 0)
+    if isinstance(v.key, str) and not all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-" for c in v.key): raise Refusal("bad_value", 0)
+    if isinstance(v.choices, list):
+        _size = len(v.choices)
+        if _size > 16: raise Refusal("bad_value", 0)
+    if isinstance(v.choices, list):
+        for oa_element in v.choices:
+            if isinstance(oa_element, str):
+                _size = len(oa_element.encode("utf-8", "surrogatepass"))
+                if _size < 1 or _size > 64: raise Refusal("bad_value", 0)
+    if isinstance(v.choices, list):
+        for oa_element in v.choices:
+            if isinstance(oa_element, str) and not all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-" for c in oa_element): raise Refusal("bad_value", 0)
+    if isinstance(v.presets, list):
+        _size = len(v.presets)
+        if _size > 16: raise Refusal("bad_value", 0)
+    if isinstance(v.description, str):
+        _size = len(v.description.encode("utf-8", "surrogatepass"))
+        if _size > 512: raise Refusal("bad_value", 0)
+    if isinstance(v.description, str) and any(c < "\x20" or "\x7f" <= c <= "\x9f" for c in v.description): raise Refusal("bad_value", 0)
+    if isinstance(v.group, str):
+        _size = len(v.group.encode("utf-8", "surrogatepass"))
+        if _size < 1 or _size > 64: raise Refusal("bad_value", 0)
+    if isinstance(v.group, str) and not all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-" for c in v.group): raise Refusal("bad_value", 0)
+    if isinstance(v.deprecated, str):
+        _size = len(v.deprecated.encode("utf-8", "surrogatepass"))
+        if _size > 512: raise Refusal("bad_value", 0)
+    if isinstance(v.deprecated, str) and any(c < "\x20" or "\x7f" <= c <= "\x9f" for c in v.deprecated): raise Refusal("bad_value", 0)
+    if isinstance(v.default_description, str):
+        _size = len(v.default_description.encode("utf-8", "surrogatepass"))
+        if _size > 512: raise Refusal("bad_value", 0)
+    if isinstance(v.default_description, str) and any(c < "\x20" or "\x7f" <= c <= "\x9f" for c in v.default_description): raise Refusal("bad_value", 0)
+    _closed_enum(ValueKind, v.kind)
+    _closed_enum(ApplyMode, v.apply)
+    _closed_enum(Location, v.lowest_location)
+    out += b"{"
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "key")
+    out += b": "
+    _esc(out, v.key)
+    encoded_counter.check(out, 262144)
+    out += b","
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "kind")
+    out += b": "
+    _esc(out, v.kind)
+    encoded_counter.check(out, 262144)
+    if v.default is not None:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "default")
+        out += b": "
+        _write_value(out, v.default, depth + 1)
+    encoded_counter.check(out, 262144)
+    if v.range is not None:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "range")
+        out += b": "
+        _write_value_range(out, v.range, depth + 1)
+    encoded_counter.check(out, 262144)
+    if v.choices:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "choices")
+        out += b": "
+        _strs(out, v.choices, depth + 1)
+    encoded_counter.check(out, 262144)
+    if v.presets:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "presets")
+        out += b": "
+        _write_list(out, v.presets, depth + 1, _write_value)
+    encoded_counter.check(out, 262144)
+    out += b","
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "description")
+    out += b": "
+    _esc(out, v.description)
+    encoded_counter.check(out, 262144)
+    out += b","
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "group")
+    out += b": "
+    _esc(out, v.group)
+    encoded_counter.check(out, 262144)
+    out += b","
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "apply")
+    out += b": "
+    _esc(out, v.apply)
+    encoded_counter.check(out, 262144)
+    out += b","
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "lockable")
+    out += b": "
+    out += b"true" if v.lockable else b"false"
+    encoded_counter.check(out, 262144)
+    out += b","
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "lowest_location")
+    out += b": "
+    _esc(out, v.lowest_location)
+    encoded_counter.check(out, 262144)
+    if v.deprecated:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "deprecated")
+        out += b": "
+        _esc(out, v.deprecated)
+    encoded_counter.check(out, 262144)
+    if v.default_description:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "default_description")
+        out += b": "
+        _esc(out, v.default_description)
+    encoded_counter.check(out, 262144)
+    out += b","
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "allows_unlimited")
+    out += b": "
+    out += b"true" if v.allows_unlimited else b"false"
+    encoded_counter.check(out, 262144)
+    out += b"\n"
+    _pad(out, depth)
+    out += b"}"
+    encoded_counter.check(out, 262144)
+
+
+def _write_change(out, v, depth):
+    encoded_counter = _CompactEncodedCounter(len(out))
+    if isinstance(v.key, str):
+        _size = len(v.key.encode("utf-8", "surrogatepass"))
+        if _size < 1 or _size > 64: raise Refusal("bad_value", 0)
+    if isinstance(v.key, str) and not all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-" for c in v.key): raise Refusal("bad_value", 0)
+    out += b"{"
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "key")
+    out += b": "
+    _esc(out, v.key)
+    encoded_counter.check(out, 65536)
+    if v.set is not None:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "set")
+        out += b": "
+        _write_value(out, v.set, depth + 1)
+    encoded_counter.check(out, 65536)
+    out += b"\n"
+    _pad(out, depth)
+    out += b"}"
+    encoded_counter.check(out, 65536)
+
+
+def _write_key_refusal(out, v, depth):
+    if isinstance(v.key, str):
+        _size = len(v.key.encode("utf-8", "surrogatepass"))
+        if _size < 1 or _size > 64: raise Refusal("bad_value", 0)
+    if isinstance(v.key, str) and not all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-" for c in v.key): raise Refusal("bad_value", 0)
+    _closed_enum(KeyRefusalReason, v.reason)
+    out += b"{"
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "key")
+    out += b": "
+    _esc(out, v.key)
+    out += b","
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "reason")
+    out += b": "
+    _esc(out, v.reason)
+    if v.refusal is not None:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "refusal")
+        out += b": "
+        _write_oa_imported0(out, v.refusal, depth + 1)
+    out += b"\n"
+    _pad(out, depth)
+    out += b"}"
+
+
+def _write_key_problem(out, v, depth):
+    if isinstance(v.key, str):
+        _size = len(v.key.encode("utf-8", "surrogatepass"))
+        if _size < 1 or _size > 64: raise Refusal("bad_value", 0)
+    if isinstance(v.key, str) and not all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-" for c in v.key): raise Refusal("bad_value", 0)
+    if isinstance(v.reason, str):
+        _size = len(v.reason.encode("utf-8", "surrogatepass"))
+        if _size > 512: raise Refusal("bad_value", 0)
+    if isinstance(v.reason, str) and any(c < "\x20" or "\x7f" <= c <= "\x9f" for c in v.reason): raise Refusal("bad_value", 0)
+    out += b"{"
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "key")
+    out += b": "
+    _esc(out, v.key)
+    out += b","
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "reason")
+    out += b": "
+    _esc(out, v.reason)
+    out += b"\n"
+    _pad(out, depth)
+    out += b"}"
+
+
+def _write_ignored_field(out, v, depth):
+    if type(v.offset) is not int: raise Refusal("wrong_type", 0)
+    if v.offset < 0 or v.offset > 262144: raise Refusal("bad_value", 0)
+    if isinstance(v.name_excerpt, str):
+        _size = len(v.name_excerpt.encode("utf-8", "surrogatepass"))
+        if _size > 64: raise Refusal("bad_value", 0)
+    if isinstance(v.name_excerpt, str) and any(c < "\x20" or "\x7f" <= c <= "\x9f" for c in v.name_excerpt): raise Refusal("bad_value", 0)
+    if not isinstance(v.reason, str):
+        raise Refusal("wrong_type", 0)
+    out += b"{"
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "offset")
+    out += b": "
+    _num(out, v.offset)
+    out += b","
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "name_excerpt")
+    out += b": "
+    _esc(out, v.name_excerpt)
+    out += b","
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "reason")
+    out += b": "
+    _esc(out, v.reason)
+    out += b","
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "source")
+    out += b": "
+    _write_config_source(out, v.source, depth + 1)
+    out += b"\n"
+    _pad(out, depth)
+    out += b"}"
+
+
+def _write_read_result(out, v, depth):
+    encoded_counter = _CompactEncodedCounter(len(out))
+    if isinstance(v.entries, list):
+        _size = len(v.entries)
+        if _size > 64: raise Refusal("bad_value", 0)
+    if isinstance(v.revision, str):
+        _size = len(v.revision.encode("utf-8", "surrogatepass"))
+        if _size > 64: raise Refusal("bad_value", 0)
+    if isinstance(v.revision, str) and not all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-" for c in v.revision): raise Refusal("bad_value", 0)
+    if isinstance(v.refused, list):
+        _size = len(v.refused)
+        if _size > 64: raise Refusal("bad_value", 0)
+    if type(v.corrupt_offset) is not int: raise Refusal("wrong_type", 0)
+    if v.corrupt_offset < 0 or v.corrupt_offset > 262144: raise Refusal("bad_value", 0)
+    if isinstance(v.ignored_fields, list):
+        _size = len(v.ignored_fields)
+        if _size > 16: raise Refusal("bad_value", 0)
+    if type(v.ignored_omitted) is not int: raise Refusal("wrong_type", 0)
+    if v.ignored_omitted < 0 or v.ignored_omitted > 262144: raise Refusal("bad_value", 0)
+    _closed_enum(ReadOutcome, v.outcome)
+    out += b"{"
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "outcome")
+    out += b": "
+    _esc(out, v.outcome)
+    encoded_counter.check(out, 262144)
+    out += b","
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "entries")
+    out += b": "
+    _write_list(out, v.entries, depth + 1, _write_entry)
+    encoded_counter.check(out, 262144)
+    out += b","
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "revision")
+    out += b": "
+    _esc(out, v.revision)
+    encoded_counter.check(out, 262144)
+    if v.refused:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "refused")
+        out += b": "
+        _write_list(out, v.refused, depth + 1, _write_key_refusal)
+    encoded_counter.check(out, 262144)
+    if v.problem is not None:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "problem")
+        out += b": "
+        _write_key_problem(out, v.problem, depth + 1)
+    encoded_counter.check(out, 262144)
+    if v.corrupt_offset != 0:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "corrupt_offset")
+        out += b": "
+        _num(out, v.corrupt_offset)
+    encoded_counter.check(out, 262144)
+    if v.ignored_fields:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "ignored_fields")
+        out += b": "
+        _write_list(out, v.ignored_fields, depth + 1, _write_ignored_field)
+    encoded_counter.check(out, 262144)
+    if v.ignored_omitted != 0:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "ignored_omitted")
+        out += b": "
+        _num(out, v.ignored_omitted)
+    encoded_counter.check(out, 262144)
+    if v.corrupt_source is not None:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "corrupt_source")
+        out += b": "
+        _write_config_source(out, v.corrupt_source, depth + 1)
+    encoded_counter.check(out, 262144)
+    if v.refusal is not None:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "refusal")
+        out += b": "
+        _write_oa_imported0(out, v.refusal, depth + 1)
+    encoded_counter.check(out, 262144)
+    out += b"\n"
+    _pad(out, depth)
+    out += b"}"
+    encoded_counter.check(out, 262144)
+
+
+def _write_user_snapshot_v2(out, v, depth):
+    encoded_counter = _CompactEncodedCounter(len(out))
+    if isinstance(v.entries, list):
+        _size = len(v.entries)
+        if _size > 64: raise Refusal("bad_value", 0)
+    if isinstance(v.revision, str):
+        _size = len(v.revision.encode("utf-8", "surrogatepass"))
+        if _size > 64: raise Refusal("bad_value", 0)
+    if isinstance(v.revision, str) and not all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-" for c in v.revision): raise Refusal("bad_value", 0)
+    out += b"{"
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "entries")
+    out += b": "
+    _write_list(out, v.entries, depth + 1, _write_entry)
+    encoded_counter.check(out, 262144)
+    out += b","
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "revision")
+    out += b": "
+    _esc(out, v.revision)
+    encoded_counter.check(out, 262144)
+    out += b"\n"
+    _pad(out, depth)
+    out += b"}"
+    encoded_counter.check(out, 262144)
+
+
+def _write_user_read_result_v2(out, v, depth):
+    if type(v.corrupt_offset) is not int: raise Refusal("wrong_type", 0)
+    if v.corrupt_offset < 0 or v.corrupt_offset > 262144: raise Refusal("bad_value", 0)
+    _closed_enum(ReadOutcome, v.outcome)
+    out += b"{"
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "outcome")
+    out += b": "
+    _esc(out, v.outcome)
+    if v.snapshot is not None:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "snapshot")
+        out += b": "
+        _write_user_snapshot_v2(out, v.snapshot, depth + 1)
+    if v.problem is not None:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "problem")
+        out += b": "
+        _write_key_problem(out, v.problem, depth + 1)
+    if v.corrupt_offset != 0:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "corrupt_offset")
+        out += b": "
+        _num(out, v.corrupt_offset)
+    if v.refusal is not None:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "refusal")
+        out += b": "
+        _write_oa_imported0(out, v.refusal, depth + 1)
+    out += b"\n"
+    _pad(out, depth)
+    out += b"}"
+
+
+def _write_user_replace_result_v2(out, v, depth):
+    encoded_counter = _CompactEncodedCounter(len(out))
+    if isinstance(v.refused, list):
+        _size = len(v.refused)
+        if _size > 64: raise Refusal("bad_value", 0)
+    if type(v.corrupt_offset) is not int: raise Refusal("wrong_type", 0)
+    if v.corrupt_offset < 0 or v.corrupt_offset > 262144: raise Refusal("bad_value", 0)
+    _closed_enum(ReplaceOutcome, v.outcome)
+    out += b"{"
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "outcome")
+    out += b": "
+    _esc(out, v.outcome)
+    encoded_counter.check(out, 262144)
+    if v.snapshot is not None:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "snapshot")
+        out += b": "
+        _write_user_snapshot_v2(out, v.snapshot, depth + 1)
+    encoded_counter.check(out, 262144)
+    if v.refused:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "refused")
+        out += b": "
+        _write_list(out, v.refused, depth + 1, _write_key_problem)
+    encoded_counter.check(out, 262144)
+    if v.corrupt_offset != 0:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "corrupt_offset")
+        out += b": "
+        _num(out, v.corrupt_offset)
+    encoded_counter.check(out, 262144)
+    if v.refusal is not None:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "refusal")
+        out += b": "
+        _write_oa_imported0(out, v.refusal, depth + 1)
+    encoded_counter.check(out, 262144)
+    out += b"\n"
+    _pad(out, depth)
+    out += b"}"
+    encoded_counter.check(out, 262144)
+
+
+def _write_config_observation_v2(out, v, depth):
+    encoded_counter = _CompactEncodedCounter(len(out))
+    if v.age_ms is not None and type(v.age_ms) is not int: raise Refusal("wrong_type", 0)
+    if v.age_ms is not None and not (-9223372036854775808 <= v.age_ms <= 9223372036854775807): raise Refusal("number_spelling", 0)
+    if isinstance(v.cursor, str):
+        _size = len(v.cursor.encode("utf-8", "surrogatepass"))
+        if _size > 512: raise Refusal("bad_value", 0)
+    if isinstance(v.cursor, str) and any(c < "\x20" or "\x7f" <= c <= "\x9f" for c in v.cursor): raise Refusal("bad_value", 0)
+    if type(v.corrupt_offset) is not int: raise Refusal("wrong_type", 0)
+    if v.corrupt_offset < 0 or v.corrupt_offset > 262144: raise Refusal("bad_value", 0)
+    if v.age_ms is not None:
+        if type(v.age_ms) is not int: raise Refusal("wrong_type", 0)
+        if v.age_ms < 0 or v.age_ms > 9223372036854775807: raise Refusal("bad_value", 0)
+    if isinstance(v.cause, str):
+        _size = len(v.cause.encode("utf-8", "surrogatepass"))
+        if _size > 512: raise Refusal("bad_value", 0)
+    if isinstance(v.cause, str) and any(c < "\x20" or "\x7f" <= c <= "\x9f" for c in v.cause): raise Refusal("bad_value", 0)
+    _closed_enum(ObservationOutcomeV2, v.outcome)
+    out += b"{"
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "outcome")
+    out += b": "
+    _esc(out, v.outcome)
+    encoded_counter.check(out, 262144)
+    out += b","
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "cursor")
+    out += b": "
+    _esc(out, v.cursor)
+    encoded_counter.check(out, 262144)
+    if v.snapshot is not None:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "snapshot")
+        out += b": "
+        _write_read_result(out, v.snapshot, depth + 1)
+    encoded_counter.check(out, 262144)
+    if v.problem is not None:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "problem")
+        out += b": "
+        _write_key_problem(out, v.problem, depth + 1)
+    encoded_counter.check(out, 262144)
+    if v.corrupt_offset != 0:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "corrupt_offset")
+        out += b": "
+        _num(out, v.corrupt_offset)
+    encoded_counter.check(out, 262144)
+    if v.corrupt_source is not None:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "corrupt_source")
+        out += b": "
+        _write_config_source(out, v.corrupt_source, depth + 1)
+    encoded_counter.check(out, 262144)
+    if v.refusal is not None:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "refusal")
+        out += b": "
+        _write_oa_imported0(out, v.refusal, depth + 1)
+    encoded_counter.check(out, 262144)
+    if v.age_ms is not None:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "age_ms")
+        out += b": "
+        _num(out, v.age_ms)
+    encoded_counter.check(out, 262144)
+    if v.cause:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "cause")
+        out += b": "
+        _esc(out, v.cause)
+    encoded_counter.check(out, 262144)
+    out += b"\n"
+    _pad(out, depth)
+    out += b"}"
+    encoded_counter.check(out, 262144)
+
+
+def _write_describe_result(out, v, depth):
+    encoded_counter = _CompactEncodedCounter(len(out))
+    if isinstance(v.descriptors, list):
+        _size = len(v.descriptors)
+        if _size > 64: raise Refusal("bad_value", 0)
+    _closed_enum(ReadOutcome, v.outcome)
+    out += b"{"
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "outcome")
+    out += b": "
+    _esc(out, v.outcome)
+    encoded_counter.check(out, 262144)
+    out += b","
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "descriptors")
+    out += b": "
+    _write_list(out, v.descriptors, depth + 1, _write_key_descriptor)
+    encoded_counter.check(out, 262144)
+    if v.refusal is not None:
+        out += b","
+        out += b"\n"
+        _pad(out, depth + 1)
+        _esc(out, "refusal")
+        out += b": "
+        _write_oa_imported0(out, v.refusal, depth + 1)
+    encoded_counter.check(out, 262144)
+    out += b"\n"
+    _pad(out, depth)
+    out += b"}"
+    encoded_counter.check(out, 262144)
+
+
 def _write_oa_config_reader_read_arguments(out, v, depth):
     out += b"{"
     out += b"\n"
@@ -632,6 +1807,88 @@ def _write_oa_config_observer_observe_arguments(out, v, depth):
     out += b": "
     _write_run_overrides(out, v.overrides, depth + 1)
     out += b","
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "cursor")
+    out += b": "
+    _esc(out, v.cursor)
+    out += b","
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "wait_ms")
+    out += b": "
+    _num(out, v.wait_ms)
+    out += b"\n"
+    _pad(out, depth)
+    out += b"}"
+
+
+def _write_oa_config_reader_v2_read_arguments(out, v, depth):
+    if isinstance(v.names, list):
+        _size = len(v.names)
+        if _size > 64: raise Refusal("bad_value", 0)
+    if isinstance(v.names, list):
+        for oa_element in v.names:
+            if isinstance(oa_element, str):
+                _size = len(oa_element.encode("utf-8", "surrogatepass"))
+                if _size < 1 or _size > 64: raise Refusal("bad_value", 0)
+    if isinstance(v.names, list):
+        for oa_element in v.names:
+            if isinstance(oa_element, str) and not all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-" for c in oa_element): raise Refusal("bad_value", 0)
+    out += b"{"
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "names")
+    out += b": "
+    _strs(out, v.names, depth + 1)
+    out += b"\n"
+    _pad(out, depth)
+    out += b"}"
+
+
+def _write_oa_config_reader_v2_describe_arguments(out, v, depth):
+    out += b"{"
+    out += b"}"
+
+
+def _write_oa_config_editor_v2_read_user_arguments(out, v, depth):
+    out += b"{"
+    out += b"}"
+
+
+def _write_oa_config_editor_v2_replace_user_arguments(out, v, depth):
+    if isinstance(v.expected_revision, str):
+        _size = len(v.expected_revision.encode("utf-8", "surrogatepass"))
+        if _size < 64 or _size > 64: raise Refusal("bad_value", 0)
+    if isinstance(v.expected_revision, str) and not all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-" for c in v.expected_revision): raise Refusal("bad_value", 0)
+    if isinstance(v.changes, list):
+        _size = len(v.changes)
+        if _size > 16: raise Refusal("bad_value", 0)
+    out += b"{"
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "expected_revision")
+    out += b": "
+    _esc(out, v.expected_revision)
+    out += b","
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "changes")
+    out += b": "
+    _write_list(out, v.changes, depth + 1, _write_change)
+    out += b"\n"
+    _pad(out, depth)
+    out += b"}"
+
+
+def _write_oa_config_observer_v2_observe_arguments(out, v, depth):
+    if isinstance(v.cursor, str):
+        _size = len(v.cursor.encode("utf-8", "surrogatepass"))
+        if _size > 512: raise Refusal("bad_value", 0)
+    if isinstance(v.cursor, str) and any(c < "\x20" or "\x7f" <= c <= "\x9f" for c in v.cursor): raise Refusal("bad_value", 0)
+    if type(v.wait_ms) is not int: raise Refusal("wrong_type", 0)
+    if v.wait_ms < 0 or v.wait_ms > 30000: raise Refusal("bad_value", 0)
+    out += b"{"
     out += b"\n"
     _pad(out, depth + 1)
     _esc(out, "cursor")
@@ -780,11 +2037,68 @@ def _write_oa_config_observer_observe_result(out, v, depth):
     out += b"}"
 
 
-def encode(v):
-    out = bytearray()
-    _write_snapshot(out, v, 0)
+def _write_oa_config_reader_v2_read_result(out, v, depth):
+    out += b"{"
     out += b"\n"
-    return bytes(out)
+    _pad(out, depth + 1)
+    _esc(out, "value")
+    out += b": "
+    _write_read_result(out, v.value, depth + 1)
+    out += b"\n"
+    _pad(out, depth)
+    out += b"}"
+
+
+def _write_oa_config_reader_v2_describe_result(out, v, depth):
+    out += b"{"
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "value")
+    out += b": "
+    _write_describe_result(out, v.value, depth + 1)
+    out += b"\n"
+    _pad(out, depth)
+    out += b"}"
+
+
+def _write_oa_config_editor_v2_read_user_result(out, v, depth):
+    out += b"{"
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "value")
+    out += b": "
+    _write_user_read_result_v2(out, v.value, depth + 1)
+    out += b"\n"
+    _pad(out, depth)
+    out += b"}"
+
+
+def _write_oa_config_editor_v2_replace_user_result(out, v, depth):
+    out += b"{"
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "value")
+    out += b": "
+    _write_user_replace_result_v2(out, v.value, depth + 1)
+    out += b"\n"
+    _pad(out, depth)
+    out += b"}"
+
+
+def _write_oa_config_observer_v2_observe_result(out, v, depth):
+    out += b"{"
+    out += b"\n"
+    _pad(out, depth + 1)
+    _esc(out, "value")
+    out += b": "
+    _write_config_observation_v2(out, v.value, depth + 1)
+    out += b"\n"
+    _pad(out, depth)
+    out += b"}"
+
+
+def encode(v):
+    return encode_snapshot(v)
 
 
 _QUOTE, _BACKSLASH, _COLON, _COMMA = 0x22, 0x5C, 0x3A, 0x2C
@@ -806,12 +2120,13 @@ class Refusal(ValueError):
 
 
 class _Reader:
-    __slots__ = ("buf", "pos", "depth")
+    __slots__ = ("buf", "pos", "depth", "limit")
 
     def __init__(self, buf):
         self.buf = buf
         self.pos = 0
         self.depth = 0
+        self.limit = _DEPTH_LIMIT
 
     def refuse(self, word):
         return Refusal(word, self.pos)
@@ -825,7 +2140,7 @@ class _Reader:
 
     def enter(self):
         self.depth += 1
-        if self.depth > _DEPTH_LIMIT:
+        if self.depth > self.limit:
             raise self.refuse("depth_exceeded")
 
     def digit(self):
@@ -1116,6 +2431,68 @@ class _Reader:
         self.pos += 1
         self.depth -= 1
         return out
+
+
+def _read_list(r, elem):
+    if r.at() != _LBRACK:
+        raise r.refuse("wrong_type")
+    r.enter()
+    r.pos += 1
+    out = []
+    r.ws()
+    if r.at() != _RBRACK:
+        while True:
+            r.ws()
+            out.append(elem(r))
+            r.ws()
+            if r.at() != _COMMA:
+                break
+            r.pos += 1
+    if r.at() != _RBRACK:
+        raise r.refuse("malformed")
+    r.pos += 1
+    r.depth -= 1
+    return out
+
+class _CompactEncodedCounter:
+    __slots__ = ('start', 'pos', 'count', 'quoted', 'escaped')
+    def __init__(self, start):
+        self.start = self.pos = start
+        self.count = 0
+        self.quoted = self.escaped = False
+    def check(self, out, limit):
+        if len(out)-self.start > 1048576: raise Refusal("encoded_size", 0)
+        while self.pos < len(out):
+            b = out[self.pos]
+            self.pos += 1
+            if not self.quoted and b in (0x20, 9, 10, 13): continue
+            self.count += 1
+            if self.count > limit: raise Refusal("encoded_size", 0)
+            if self.quoted:
+                if self.escaped: self.escaped = False
+                elif b == 0x5c: self.escaped = True
+                elif b == 0x22: self.quoted = False
+            elif b == 0x22: self.quoted = True
+
+def _check_encoded_size(r, limit):
+    depth, quoted, escaped, count = r.depth, False, False, 0
+    for i in range(r.pos, min(len(r.buf), r.pos + 1048577)):
+        if i-r.pos >= 1048576: raise r.refuse("encoded_size")
+        c = r.buf[i]
+        if not quoted and c in (0x20, 9, 10, 13): continue
+        count += 1
+        if count > limit: raise r.refuse("encoded_size")
+        if quoted:
+            if escaped: escaped = False
+            elif c == 0x5c: escaped = True
+            elif c == 0x22: quoted = False
+        elif c == 0x22: quoted = True
+        elif c in (0x7b, 0x5b):
+            depth += 1
+            if depth > 64: raise r.refuse("depth_exceeded")
+        elif c in (0x7d, 0x5d):
+            depth -= 1
+            if depth <= r.depth: return
 
 
 def _read_run_overrides(r):
@@ -1548,6 +2925,1129 @@ def _read_config_observation(r):
     return v
 
 
+def _read_value(r):
+    if r.at() != _LBRACE:
+        raise r.refuse("wrong_type")
+    _check_encoded_size(r, 262144)
+    r.enter()
+    r.pos += 1
+    v = Value()
+    seen = 0
+    r.ws()
+    if r.at() != _RBRACE:
+        while True:
+            r.ws()
+            if r.at() != _QUOTE:
+                raise r.refuse("malformed")
+            key = r.string()
+            r.ws()
+            if r.at() != _COLON:
+                raise r.refuse("malformed")
+            r.pos += 1
+            r.ws()
+            if key == "kind":
+                if seen & 1:
+                    raise r.refuse("duplicate_field")
+                seen |= 1
+                v.kind = r.string()
+            elif key == "boolean":
+                if seen & 2:
+                    raise r.refuse("duplicate_field")
+                seen |= 2
+                v.boolean = r.boolean()
+            elif key == "integer":
+                if seen & 4:
+                    raise r.refuse("duplicate_field")
+                seen |= 4
+                v.integer = r.integer(-9223372036854775808, 9223372036854775807)
+            elif key == "bytes":
+                if seen & 8:
+                    raise r.refuse("duplicate_field")
+                seen |= 8
+                v.bytes = r.integer(-9223372036854775808, 9223372036854775807)
+            elif key == "duration_ms":
+                if seen & 16:
+                    raise r.refuse("duplicate_field")
+                seen |= 16
+                v.duration_ms = r.integer(-9223372036854775808, 9223372036854775807)
+            elif key == "text":
+                if seen & 32:
+                    raise r.refuse("duplicate_field")
+                seen |= 32
+                v.text = r.string()
+            elif key == "choice":
+                if seen & 64:
+                    raise r.refuse("duplicate_field")
+                seen |= 64
+                v.choice = r.string()
+            elif key == "text_list":
+                if seen & 128:
+                    raise r.refuse("duplicate_field")
+                seen |= 128
+                v.text_list = r.str_list()
+            elif key == "text_map":
+                if seen & 256:
+                    raise r.refuse("duplicate_field")
+                seen |= 256
+                v.text_map = r.str_map()
+            else:
+                raise r.refuse("unknown_field")
+            r.ws()
+            if r.at() != _COMMA:
+                break
+            r.pos += 1
+    if r.at() != _RBRACE:
+        raise r.refuse("malformed")
+    r.pos += 1
+    r.depth -= 1
+    if seen & 1 != 1:
+        raise r.refuse("missing_field")
+    _size = len(v.text.encode("utf-8", "surrogatepass"))
+    if _size > 4096: raise r.refuse("bad_value")
+    if any(c < "\x20" or "\x7f" <= c <= "\x9f" for c in v.text): raise r.refuse("bad_value")
+    _size = len(v.choice.encode("utf-8", "surrogatepass"))
+    if _size != 0 and (_size < 1 or _size > 64): raise r.refuse("bad_value")
+    if not all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-" for c in v.choice): raise r.refuse("bad_value")
+    _size = len(v.text_list)
+    if _size > 128: raise r.refuse("bad_value")
+    if isinstance(v.text_list, list):
+        for oa_element in v.text_list:
+            _size = len(oa_element.encode("utf-8", "surrogatepass"))
+            if _size < 1 or _size > 128: raise r.refuse("bad_value")
+    if isinstance(v.text_list, list):
+        for oa_element in v.text_list:
+            if any(c < "\x20" or "\x7f" <= c <= "\x9f" for c in oa_element): raise r.refuse("bad_value")
+    _size = len(v.text_map)
+    if _size > 8: raise r.refuse("bad_value")
+    if isinstance(v.text_map, dict):
+        for oa_element in v.text_map:
+            _size = len(oa_element.encode("utf-8", "surrogatepass"))
+            if _size < 1 or _size > 64: raise r.refuse("bad_value")
+    if isinstance(v.text_map, dict):
+        for oa_element in v.text_map:
+            if not all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-" for c in oa_element): raise r.refuse("bad_value")
+    if isinstance(v.text_map, dict):
+        for oa_element in v.text_map.values():
+            _size = len(oa_element.encode("utf-8", "surrogatepass"))
+            if _size > 512: raise r.refuse("bad_value")
+    if isinstance(v.text_map, dict):
+        for oa_element in v.text_map.values():
+            if any(c < "\x20" or "\x7f" <= c <= "\x9f" for c in oa_element): raise r.refuse("bad_value")
+    try:
+        v.kind = ValueKind(v.kind)
+    except ValueError:
+        raise r.refuse("bad_enum") from None
+    if not ((v.kind == "unlimited" or v.kind == "boolean" or v.kind == "integer" or v.kind == "bytes" or v.kind == "duration" or v.kind == "text" or v.kind == "choice" or v.kind == "text_list" or v.kind == "text_map") and (v.kind == "boolean" or not v.boolean) and (v.kind == "integer" or v.integer == 0) and (v.kind == "bytes" or v.bytes == 0) and (v.kind == "duration" or v.duration_ms == 0) and (v.kind == "text" or v.text == "") and (v.kind == "choice" or v.choice == "") and (v.kind == "text_list" or not v.text_list) and (v.kind == "text_map" or not v.text_map)):
+        raise r.refuse("bad_value")
+    return v
+
+
+def _read_config_source(r):
+    if r.at() != _LBRACE:
+        raise r.refuse("wrong_type")
+    r.enter()
+    r.pos += 1
+    v = ConfigSource()
+    seen = 0
+    r.ws()
+    if r.at() != _RBRACE:
+        while True:
+            r.ws()
+            if r.at() != _QUOTE:
+                raise r.refuse("malformed")
+            key = r.string()
+            r.ws()
+            if r.at() != _COLON:
+                raise r.refuse("malformed")
+            r.pos += 1
+            r.ws()
+            if key == "location":
+                if seen & 1:
+                    raise r.refuse("duplicate_field")
+                seen |= 1
+                v.location = r.string()
+            elif key == "path":
+                if seen & 2:
+                    raise r.refuse("duplicate_field")
+                seen |= 2
+                v.path = r.string()
+            else:
+                r.skip_value()
+            r.ws()
+            if r.at() != _COMMA:
+                break
+            r.pos += 1
+    if r.at() != _RBRACE:
+        raise r.refuse("malformed")
+    r.pos += 1
+    r.depth -= 1
+    if seen & 3 != 3:
+        raise r.refuse("missing_field")
+    _size = len(v.path.encode("utf-8", "surrogatepass"))
+    if _size > 4096: raise r.refuse("bad_value")
+    if any(c < "\x20" or "\x7f" <= c <= "\x9f" for c in v.path): raise r.refuse("bad_value")
+    try:
+        v.location = Location(v.location)
+    except ValueError:
+        raise r.refuse("bad_enum") from None
+    return v
+
+
+def _read_key_origin(r):
+    if r.at() != _LBRACE:
+        raise r.refuse("wrong_type")
+    r.enter()
+    r.pos += 1
+    v = KeyOrigin()
+    seen = 0
+    r.ws()
+    if r.at() != _RBRACE:
+        while True:
+            r.ws()
+            if r.at() != _QUOTE:
+                raise r.refuse("malformed")
+            key = r.string()
+            r.ws()
+            if r.at() != _COLON:
+                raise r.refuse("malformed")
+            r.pos += 1
+            r.ws()
+            if key == "location":
+                if seen & 1:
+                    raise r.refuse("duplicate_field")
+                seen |= 1
+                v.location = r.string()
+            elif key == "path":
+                if seen & 2:
+                    raise r.refuse("duplicate_field")
+                seen |= 2
+                v.path = r.string()
+            elif key == "state":
+                if seen & 4:
+                    raise r.refuse("duplicate_field")
+                seen |= 4
+                v.state = r.string()
+            elif key == "reason":
+                if seen & 8:
+                    raise r.refuse("duplicate_field")
+                seen |= 8
+                v.reason = r.string()
+            elif key == "shadowed":
+                if seen & 16:
+                    raise r.refuse("duplicate_field")
+                seen |= 16
+                v.shadowed = _read_list(r, _read_config_source)
+            else:
+                r.skip_value()
+            r.ws()
+            if r.at() != _COMMA:
+                break
+            r.pos += 1
+    if r.at() != _RBRACE:
+        raise r.refuse("malformed")
+    r.pos += 1
+    r.depth -= 1
+    if seen & 6 != 6:
+        raise r.refuse("missing_field")
+    _size = len(v.path.encode("utf-8", "surrogatepass"))
+    if _size > 4096: raise r.refuse("bad_value")
+    if any(c < "\x20" or "\x7f" <= c <= "\x9f" for c in v.path): raise r.refuse("bad_value")
+    _size = len(v.reason.encode("utf-8", "surrogatepass"))
+    if _size > 512: raise r.refuse("bad_value")
+    if any(c < "\x20" or "\x7f" <= c <= "\x9f" for c in v.reason): raise r.refuse("bad_value")
+    _size = len(v.shadowed)
+    if _size > 3: raise r.refuse("bad_value")
+    if seen & 1:
+        try:
+            v.location = Location(v.location)
+        except ValueError:
+            raise r.refuse("bad_enum") from None
+    v.state = _open_enum(KeyState, v.state)
+    return v
+
+
+def _read_entry(r):
+    if r.at() != _LBRACE:
+        raise r.refuse("wrong_type")
+    r.enter()
+    r.pos += 1
+    v = Entry()
+    seen = 0
+    r.ws()
+    if r.at() != _RBRACE:
+        while True:
+            r.ws()
+            if r.at() != _QUOTE:
+                raise r.refuse("malformed")
+            key = r.string()
+            r.ws()
+            if r.at() != _COLON:
+                raise r.refuse("malformed")
+            r.pos += 1
+            r.ws()
+            if key == "key":
+                if seen & 1:
+                    raise r.refuse("duplicate_field")
+                seen |= 1
+                v.key = r.string()
+            elif key == "value":
+                if seen & 2:
+                    raise r.refuse("duplicate_field")
+                seen |= 2
+                v.value = _read_value(r)
+            elif key == "origin":
+                if seen & 4:
+                    raise r.refuse("duplicate_field")
+                seen |= 4
+                v.origin = _read_key_origin(r)
+            else:
+                r.skip_value()
+            r.ws()
+            if r.at() != _COMMA:
+                break
+            r.pos += 1
+    if r.at() != _RBRACE:
+        raise r.refuse("malformed")
+    r.pos += 1
+    r.depth -= 1
+    if seen & 5 != 5:
+        raise r.refuse("missing_field")
+    _size = len(v.key.encode("utf-8", "surrogatepass"))
+    if _size < 1 or _size > 64: raise r.refuse("bad_value")
+    if not all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-" for c in v.key): raise r.refuse("bad_value")
+    return v
+
+
+def _read_value_range(r):
+    if r.at() != _LBRACE:
+        raise r.refuse("wrong_type")
+    r.enter()
+    r.pos += 1
+    v = ValueRange()
+    seen = 0
+    r.ws()
+    if r.at() != _RBRACE:
+        while True:
+            r.ws()
+            if r.at() != _QUOTE:
+                raise r.refuse("malformed")
+            key = r.string()
+            r.ws()
+            if r.at() != _COLON:
+                raise r.refuse("malformed")
+            r.pos += 1
+            r.ws()
+            if key == "min":
+                if seen & 1:
+                    raise r.refuse("duplicate_field")
+                seen |= 1
+                v.min = r.integer(-9223372036854775808, 9223372036854775807)
+            elif key == "max":
+                if seen & 2:
+                    raise r.refuse("duplicate_field")
+                seen |= 2
+                v.max = r.integer(-9223372036854775808, 9223372036854775807)
+            else:
+                r.skip_value()
+            r.ws()
+            if r.at() != _COMMA:
+                break
+            r.pos += 1
+    if r.at() != _RBRACE:
+        raise r.refuse("malformed")
+    r.pos += 1
+    r.depth -= 1
+    if seen & 3 != 3:
+        raise r.refuse("missing_field")
+    return v
+
+
+def _read_key_descriptor(r):
+    if r.at() != _LBRACE:
+        raise r.refuse("wrong_type")
+    _check_encoded_size(r, 262144)
+    r.enter()
+    r.pos += 1
+    v = KeyDescriptor()
+    seen = 0
+    r.ws()
+    if r.at() != _RBRACE:
+        while True:
+            r.ws()
+            if r.at() != _QUOTE:
+                raise r.refuse("malformed")
+            key = r.string()
+            r.ws()
+            if r.at() != _COLON:
+                raise r.refuse("malformed")
+            r.pos += 1
+            r.ws()
+            if key == "key":
+                if seen & 1:
+                    raise r.refuse("duplicate_field")
+                seen |= 1
+                v.key = r.string()
+            elif key == "kind":
+                if seen & 2:
+                    raise r.refuse("duplicate_field")
+                seen |= 2
+                v.kind = r.string()
+            elif key == "default":
+                if seen & 4:
+                    raise r.refuse("duplicate_field")
+                seen |= 4
+                v.default = _read_value(r)
+            elif key == "range":
+                if seen & 8:
+                    raise r.refuse("duplicate_field")
+                seen |= 8
+                v.range = _read_value_range(r)
+            elif key == "choices":
+                if seen & 16:
+                    raise r.refuse("duplicate_field")
+                seen |= 16
+                v.choices = r.str_list()
+            elif key == "presets":
+                if seen & 32:
+                    raise r.refuse("duplicate_field")
+                seen |= 32
+                v.presets = _read_list(r, _read_value)
+            elif key == "description":
+                if seen & 64:
+                    raise r.refuse("duplicate_field")
+                seen |= 64
+                v.description = r.string()
+            elif key == "group":
+                if seen & 128:
+                    raise r.refuse("duplicate_field")
+                seen |= 128
+                v.group = r.string()
+            elif key == "apply":
+                if seen & 256:
+                    raise r.refuse("duplicate_field")
+                seen |= 256
+                v.apply = r.string()
+            elif key == "lockable":
+                if seen & 512:
+                    raise r.refuse("duplicate_field")
+                seen |= 512
+                v.lockable = r.boolean()
+            elif key == "lowest_location":
+                if seen & 1024:
+                    raise r.refuse("duplicate_field")
+                seen |= 1024
+                v.lowest_location = r.string()
+            elif key == "deprecated":
+                if seen & 2048:
+                    raise r.refuse("duplicate_field")
+                seen |= 2048
+                v.deprecated = r.string()
+            elif key == "default_description":
+                if seen & 4096:
+                    raise r.refuse("duplicate_field")
+                seen |= 4096
+                v.default_description = r.string()
+            elif key == "allows_unlimited":
+                if seen & 8192:
+                    raise r.refuse("duplicate_field")
+                seen |= 8192
+                v.allows_unlimited = r.boolean()
+            else:
+                r.skip_value()
+            r.ws()
+            if r.at() != _COMMA:
+                break
+            r.pos += 1
+    if r.at() != _RBRACE:
+        raise r.refuse("malformed")
+    r.pos += 1
+    r.depth -= 1
+    if seen & 10179 != 10179:
+        raise r.refuse("missing_field")
+    _size = len(v.key.encode("utf-8", "surrogatepass"))
+    if _size < 1 or _size > 64: raise r.refuse("bad_value")
+    if not all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-" for c in v.key): raise r.refuse("bad_value")
+    _size = len(v.choices)
+    if _size > 16: raise r.refuse("bad_value")
+    if isinstance(v.choices, list):
+        for oa_element in v.choices:
+            _size = len(oa_element.encode("utf-8", "surrogatepass"))
+            if _size < 1 or _size > 64: raise r.refuse("bad_value")
+    if isinstance(v.choices, list):
+        for oa_element in v.choices:
+            if not all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-" for c in oa_element): raise r.refuse("bad_value")
+    _size = len(v.presets)
+    if _size > 16: raise r.refuse("bad_value")
+    _size = len(v.description.encode("utf-8", "surrogatepass"))
+    if _size > 512: raise r.refuse("bad_value")
+    if any(c < "\x20" or "\x7f" <= c <= "\x9f" for c in v.description): raise r.refuse("bad_value")
+    _size = len(v.group.encode("utf-8", "surrogatepass"))
+    if _size < 1 or _size > 64: raise r.refuse("bad_value")
+    if not all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-" for c in v.group): raise r.refuse("bad_value")
+    _size = len(v.deprecated.encode("utf-8", "surrogatepass"))
+    if _size > 512: raise r.refuse("bad_value")
+    if any(c < "\x20" or "\x7f" <= c <= "\x9f" for c in v.deprecated): raise r.refuse("bad_value")
+    _size = len(v.default_description.encode("utf-8", "surrogatepass"))
+    if _size > 512: raise r.refuse("bad_value")
+    if any(c < "\x20" or "\x7f" <= c <= "\x9f" for c in v.default_description): raise r.refuse("bad_value")
+    try:
+        v.kind = ValueKind(v.kind)
+    except ValueError:
+        raise r.refuse("bad_enum") from None
+    try:
+        v.apply = ApplyMode(v.apply)
+    except ValueError:
+        raise r.refuse("bad_enum") from None
+    try:
+        v.lowest_location = Location(v.lowest_location)
+    except ValueError:
+        raise r.refuse("bad_enum") from None
+    return v
+
+
+def _read_change(r):
+    if r.at() != _LBRACE:
+        raise r.refuse("wrong_type")
+    _check_encoded_size(r, 65536)
+    r.enter()
+    r.pos += 1
+    v = Change()
+    seen = 0
+    r.ws()
+    if r.at() != _RBRACE:
+        while True:
+            r.ws()
+            if r.at() != _QUOTE:
+                raise r.refuse("malformed")
+            key = r.string()
+            r.ws()
+            if r.at() != _COLON:
+                raise r.refuse("malformed")
+            r.pos += 1
+            r.ws()
+            if key == "key":
+                if seen & 1:
+                    raise r.refuse("duplicate_field")
+                seen |= 1
+                v.key = r.string()
+            elif key == "set":
+                if seen & 2:
+                    raise r.refuse("duplicate_field")
+                seen |= 2
+                v.set = _read_value(r)
+            else:
+                raise r.refuse("unknown_field")
+            r.ws()
+            if r.at() != _COMMA:
+                break
+            r.pos += 1
+    if r.at() != _RBRACE:
+        raise r.refuse("malformed")
+    r.pos += 1
+    r.depth -= 1
+    if seen & 1 != 1:
+        raise r.refuse("missing_field")
+    _size = len(v.key.encode("utf-8", "surrogatepass"))
+    if _size < 1 or _size > 64: raise r.refuse("bad_value")
+    if not all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-" for c in v.key): raise r.refuse("bad_value")
+    return v
+
+
+def _read_key_refusal(r):
+    if r.at() != _LBRACE:
+        raise r.refuse("wrong_type")
+    r.enter()
+    r.pos += 1
+    v = KeyRefusal()
+    seen = 0
+    r.ws()
+    if r.at() != _RBRACE:
+        while True:
+            r.ws()
+            if r.at() != _QUOTE:
+                raise r.refuse("malformed")
+            key = r.string()
+            r.ws()
+            if r.at() != _COLON:
+                raise r.refuse("malformed")
+            r.pos += 1
+            r.ws()
+            if key == "key":
+                if seen & 1:
+                    raise r.refuse("duplicate_field")
+                seen |= 1
+                v.key = r.string()
+            elif key == "reason":
+                if seen & 2:
+                    raise r.refuse("duplicate_field")
+                seen |= 2
+                v.reason = r.string()
+            elif key == "refusal":
+                if seen & 4:
+                    raise r.refuse("duplicate_field")
+                seen |= 4
+                v.refusal = _read_oa_imported0(r)
+            else:
+                r.skip_value()
+            r.ws()
+            if r.at() != _COMMA:
+                break
+            r.pos += 1
+    if r.at() != _RBRACE:
+        raise r.refuse("malformed")
+    r.pos += 1
+    r.depth -= 1
+    if seen & 3 != 3:
+        raise r.refuse("missing_field")
+    _size = len(v.key.encode("utf-8", "surrogatepass"))
+    if _size < 1 or _size > 64: raise r.refuse("bad_value")
+    if not all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-" for c in v.key): raise r.refuse("bad_value")
+    try:
+        v.reason = KeyRefusalReason(v.reason)
+    except ValueError:
+        raise r.refuse("bad_enum") from None
+    return v
+
+
+def _read_key_problem(r):
+    if r.at() != _LBRACE:
+        raise r.refuse("wrong_type")
+    r.enter()
+    r.pos += 1
+    v = KeyProblem()
+    seen = 0
+    r.ws()
+    if r.at() != _RBRACE:
+        while True:
+            r.ws()
+            if r.at() != _QUOTE:
+                raise r.refuse("malformed")
+            key = r.string()
+            r.ws()
+            if r.at() != _COLON:
+                raise r.refuse("malformed")
+            r.pos += 1
+            r.ws()
+            if key == "key":
+                if seen & 1:
+                    raise r.refuse("duplicate_field")
+                seen |= 1
+                v.key = r.string()
+            elif key == "reason":
+                if seen & 2:
+                    raise r.refuse("duplicate_field")
+                seen |= 2
+                v.reason = r.string()
+            else:
+                r.skip_value()
+            r.ws()
+            if r.at() != _COMMA:
+                break
+            r.pos += 1
+    if r.at() != _RBRACE:
+        raise r.refuse("malformed")
+    r.pos += 1
+    r.depth -= 1
+    if seen & 3 != 3:
+        raise r.refuse("missing_field")
+    _size = len(v.key.encode("utf-8", "surrogatepass"))
+    if _size < 1 or _size > 64: raise r.refuse("bad_value")
+    if not all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-" for c in v.key): raise r.refuse("bad_value")
+    _size = len(v.reason.encode("utf-8", "surrogatepass"))
+    if _size > 512: raise r.refuse("bad_value")
+    if any(c < "\x20" or "\x7f" <= c <= "\x9f" for c in v.reason): raise r.refuse("bad_value")
+    return v
+
+
+def _read_ignored_field(r):
+    if r.at() != _LBRACE:
+        raise r.refuse("wrong_type")
+    r.enter()
+    r.pos += 1
+    v = IgnoredField()
+    seen = 0
+    r.ws()
+    if r.at() != _RBRACE:
+        while True:
+            r.ws()
+            if r.at() != _QUOTE:
+                raise r.refuse("malformed")
+            key = r.string()
+            r.ws()
+            if r.at() != _COLON:
+                raise r.refuse("malformed")
+            r.pos += 1
+            r.ws()
+            if key == "offset":
+                if seen & 1:
+                    raise r.refuse("duplicate_field")
+                seen |= 1
+                v.offset = r.integer(-9223372036854775808, 9223372036854775807)
+            elif key == "name_excerpt":
+                if seen & 2:
+                    raise r.refuse("duplicate_field")
+                seen |= 2
+                v.name_excerpt = r.string()
+            elif key == "reason":
+                if seen & 4:
+                    raise r.refuse("duplicate_field")
+                seen |= 4
+                v.reason = r.string()
+            elif key == "source":
+                if seen & 8:
+                    raise r.refuse("duplicate_field")
+                seen |= 8
+                v.source = _read_config_source(r)
+            else:
+                r.skip_value()
+            r.ws()
+            if r.at() != _COMMA:
+                break
+            r.pos += 1
+    if r.at() != _RBRACE:
+        raise r.refuse("malformed")
+    r.pos += 1
+    r.depth -= 1
+    if seen & 15 != 15:
+        raise r.refuse("missing_field")
+    if v.offset < 0 or v.offset > 262144: raise r.refuse("bad_value")
+    _size = len(v.name_excerpt.encode("utf-8", "surrogatepass"))
+    if _size > 64: raise r.refuse("bad_value")
+    if any(c < "\x20" or "\x7f" <= c <= "\x9f" for c in v.name_excerpt): raise r.refuse("bad_value")
+    v.reason = _open_enum(IgnoredFieldReason, v.reason)
+    return v
+
+
+def _read_read_result(r):
+    if r.at() != _LBRACE:
+        raise r.refuse("wrong_type")
+    _check_encoded_size(r, 262144)
+    r.enter()
+    r.pos += 1
+    v = ReadResult()
+    seen = 0
+    r.ws()
+    if r.at() != _RBRACE:
+        while True:
+            r.ws()
+            if r.at() != _QUOTE:
+                raise r.refuse("malformed")
+            key = r.string()
+            r.ws()
+            if r.at() != _COLON:
+                raise r.refuse("malformed")
+            r.pos += 1
+            r.ws()
+            if key == "outcome":
+                if seen & 1:
+                    raise r.refuse("duplicate_field")
+                seen |= 1
+                v.outcome = r.string()
+            elif key == "entries":
+                if seen & 2:
+                    raise r.refuse("duplicate_field")
+                seen |= 2
+                v.entries = _read_list(r, _read_entry)
+            elif key == "revision":
+                if seen & 4:
+                    raise r.refuse("duplicate_field")
+                seen |= 4
+                v.revision = r.string()
+            elif key == "refused":
+                if seen & 8:
+                    raise r.refuse("duplicate_field")
+                seen |= 8
+                v.refused = _read_list(r, _read_key_refusal)
+            elif key == "problem":
+                if seen & 16:
+                    raise r.refuse("duplicate_field")
+                seen |= 16
+                v.problem = _read_key_problem(r)
+            elif key == "corrupt_offset":
+                if seen & 32:
+                    raise r.refuse("duplicate_field")
+                seen |= 32
+                v.corrupt_offset = r.integer(-9223372036854775808, 9223372036854775807)
+            elif key == "ignored_fields":
+                if seen & 64:
+                    raise r.refuse("duplicate_field")
+                seen |= 64
+                v.ignored_fields = _read_list(r, _read_ignored_field)
+            elif key == "ignored_omitted":
+                if seen & 128:
+                    raise r.refuse("duplicate_field")
+                seen |= 128
+                v.ignored_omitted = r.integer(-9223372036854775808, 9223372036854775807)
+            elif key == "corrupt_source":
+                if seen & 256:
+                    raise r.refuse("duplicate_field")
+                seen |= 256
+                v.corrupt_source = _read_config_source(r)
+            elif key == "refusal":
+                if seen & 512:
+                    raise r.refuse("duplicate_field")
+                seen |= 512
+                v.refusal = _read_oa_imported0(r)
+            else:
+                r.skip_value()
+            r.ws()
+            if r.at() != _COMMA:
+                break
+            r.pos += 1
+    if r.at() != _RBRACE:
+        raise r.refuse("malformed")
+    r.pos += 1
+    r.depth -= 1
+    if seen & 7 != 7:
+        raise r.refuse("missing_field")
+    _size = len(v.entries)
+    if _size > 64: raise r.refuse("bad_value")
+    _size = len(v.revision.encode("utf-8", "surrogatepass"))
+    if _size > 64: raise r.refuse("bad_value")
+    if not all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-" for c in v.revision): raise r.refuse("bad_value")
+    _size = len(v.refused)
+    if _size > 64: raise r.refuse("bad_value")
+    if v.corrupt_offset < 0 or v.corrupt_offset > 262144: raise r.refuse("bad_value")
+    _size = len(v.ignored_fields)
+    if _size > 16: raise r.refuse("bad_value")
+    if v.ignored_omitted < 0 or v.ignored_omitted > 262144: raise r.refuse("bad_value")
+    try:
+        v.outcome = ReadOutcome(v.outcome)
+    except ValueError:
+        raise r.refuse("bad_enum") from None
+    return v
+
+
+def _read_user_snapshot_v2(r):
+    if r.at() != _LBRACE:
+        raise r.refuse("wrong_type")
+    _check_encoded_size(r, 262144)
+    r.enter()
+    r.pos += 1
+    v = UserSnapshotV2()
+    seen = 0
+    r.ws()
+    if r.at() != _RBRACE:
+        while True:
+            r.ws()
+            if r.at() != _QUOTE:
+                raise r.refuse("malformed")
+            key = r.string()
+            r.ws()
+            if r.at() != _COLON:
+                raise r.refuse("malformed")
+            r.pos += 1
+            r.ws()
+            if key == "entries":
+                if seen & 1:
+                    raise r.refuse("duplicate_field")
+                seen |= 1
+                v.entries = _read_list(r, _read_entry)
+            elif key == "revision":
+                if seen & 2:
+                    raise r.refuse("duplicate_field")
+                seen |= 2
+                v.revision = r.string()
+            else:
+                r.skip_value()
+            r.ws()
+            if r.at() != _COMMA:
+                break
+            r.pos += 1
+    if r.at() != _RBRACE:
+        raise r.refuse("malformed")
+    r.pos += 1
+    r.depth -= 1
+    if seen & 3 != 3:
+        raise r.refuse("missing_field")
+    _size = len(v.entries)
+    if _size > 64: raise r.refuse("bad_value")
+    _size = len(v.revision.encode("utf-8", "surrogatepass"))
+    if _size > 64: raise r.refuse("bad_value")
+    if not all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-" for c in v.revision): raise r.refuse("bad_value")
+    return v
+
+
+def _read_user_read_result_v2(r):
+    if r.at() != _LBRACE:
+        raise r.refuse("wrong_type")
+    r.enter()
+    r.pos += 1
+    v = UserReadResultV2()
+    seen = 0
+    r.ws()
+    if r.at() != _RBRACE:
+        while True:
+            r.ws()
+            if r.at() != _QUOTE:
+                raise r.refuse("malformed")
+            key = r.string()
+            r.ws()
+            if r.at() != _COLON:
+                raise r.refuse("malformed")
+            r.pos += 1
+            r.ws()
+            if key == "outcome":
+                if seen & 1:
+                    raise r.refuse("duplicate_field")
+                seen |= 1
+                v.outcome = r.string()
+            elif key == "snapshot":
+                if seen & 2:
+                    raise r.refuse("duplicate_field")
+                seen |= 2
+                v.snapshot = _read_user_snapshot_v2(r)
+            elif key == "problem":
+                if seen & 4:
+                    raise r.refuse("duplicate_field")
+                seen |= 4
+                v.problem = _read_key_problem(r)
+            elif key == "corrupt_offset":
+                if seen & 8:
+                    raise r.refuse("duplicate_field")
+                seen |= 8
+                v.corrupt_offset = r.integer(-9223372036854775808, 9223372036854775807)
+            elif key == "refusal":
+                if seen & 16:
+                    raise r.refuse("duplicate_field")
+                seen |= 16
+                v.refusal = _read_oa_imported0(r)
+            else:
+                r.skip_value()
+            r.ws()
+            if r.at() != _COMMA:
+                break
+            r.pos += 1
+    if r.at() != _RBRACE:
+        raise r.refuse("malformed")
+    r.pos += 1
+    r.depth -= 1
+    if seen & 1 != 1:
+        raise r.refuse("missing_field")
+    if v.corrupt_offset < 0 or v.corrupt_offset > 262144: raise r.refuse("bad_value")
+    try:
+        v.outcome = ReadOutcome(v.outcome)
+    except ValueError:
+        raise r.refuse("bad_enum") from None
+    return v
+
+
+def _read_user_replace_result_v2(r):
+    if r.at() != _LBRACE:
+        raise r.refuse("wrong_type")
+    _check_encoded_size(r, 262144)
+    r.enter()
+    r.pos += 1
+    v = UserReplaceResultV2()
+    seen = 0
+    r.ws()
+    if r.at() != _RBRACE:
+        while True:
+            r.ws()
+            if r.at() != _QUOTE:
+                raise r.refuse("malformed")
+            key = r.string()
+            r.ws()
+            if r.at() != _COLON:
+                raise r.refuse("malformed")
+            r.pos += 1
+            r.ws()
+            if key == "outcome":
+                if seen & 1:
+                    raise r.refuse("duplicate_field")
+                seen |= 1
+                v.outcome = r.string()
+            elif key == "snapshot":
+                if seen & 2:
+                    raise r.refuse("duplicate_field")
+                seen |= 2
+                v.snapshot = _read_user_snapshot_v2(r)
+            elif key == "refused":
+                if seen & 4:
+                    raise r.refuse("duplicate_field")
+                seen |= 4
+                v.refused = _read_list(r, _read_key_problem)
+            elif key == "corrupt_offset":
+                if seen & 8:
+                    raise r.refuse("duplicate_field")
+                seen |= 8
+                v.corrupt_offset = r.integer(-9223372036854775808, 9223372036854775807)
+            elif key == "refusal":
+                if seen & 16:
+                    raise r.refuse("duplicate_field")
+                seen |= 16
+                v.refusal = _read_oa_imported0(r)
+            else:
+                r.skip_value()
+            r.ws()
+            if r.at() != _COMMA:
+                break
+            r.pos += 1
+    if r.at() != _RBRACE:
+        raise r.refuse("malformed")
+    r.pos += 1
+    r.depth -= 1
+    if seen & 1 != 1:
+        raise r.refuse("missing_field")
+    _size = len(v.refused)
+    if _size > 64: raise r.refuse("bad_value")
+    if v.corrupt_offset < 0 or v.corrupt_offset > 262144: raise r.refuse("bad_value")
+    try:
+        v.outcome = ReplaceOutcome(v.outcome)
+    except ValueError:
+        raise r.refuse("bad_enum") from None
+    return v
+
+
+def _read_config_observation_v2(r):
+    if r.at() != _LBRACE:
+        raise r.refuse("wrong_type")
+    _check_encoded_size(r, 262144)
+    r.enter()
+    r.pos += 1
+    v = ConfigObservationV2()
+    seen = 0
+    r.ws()
+    if r.at() != _RBRACE:
+        while True:
+            r.ws()
+            if r.at() != _QUOTE:
+                raise r.refuse("malformed")
+            key = r.string()
+            r.ws()
+            if r.at() != _COLON:
+                raise r.refuse("malformed")
+            r.pos += 1
+            r.ws()
+            if key == "outcome":
+                if seen & 1:
+                    raise r.refuse("duplicate_field")
+                seen |= 1
+                v.outcome = r.string()
+            elif key == "cursor":
+                if seen & 2:
+                    raise r.refuse("duplicate_field")
+                seen |= 2
+                v.cursor = r.string()
+            elif key == "snapshot":
+                if seen & 4:
+                    raise r.refuse("duplicate_field")
+                seen |= 4
+                v.snapshot = _read_read_result(r)
+            elif key == "problem":
+                if seen & 8:
+                    raise r.refuse("duplicate_field")
+                seen |= 8
+                v.problem = _read_key_problem(r)
+            elif key == "corrupt_offset":
+                if seen & 16:
+                    raise r.refuse("duplicate_field")
+                seen |= 16
+                v.corrupt_offset = r.integer(-9223372036854775808, 9223372036854775807)
+            elif key == "corrupt_source":
+                if seen & 32:
+                    raise r.refuse("duplicate_field")
+                seen |= 32
+                v.corrupt_source = _read_config_source(r)
+            elif key == "refusal":
+                if seen & 64:
+                    raise r.refuse("duplicate_field")
+                seen |= 64
+                v.refusal = _read_oa_imported0(r)
+            elif key == "age_ms":
+                if seen & 128:
+                    raise r.refuse("duplicate_field")
+                seen |= 128
+                v.age_ms = r.integer(-9223372036854775808, 9223372036854775807)
+            elif key == "cause":
+                if seen & 256:
+                    raise r.refuse("duplicate_field")
+                seen |= 256
+                v.cause = r.string()
+            else:
+                r.skip_value()
+            r.ws()
+            if r.at() != _COMMA:
+                break
+            r.pos += 1
+    if r.at() != _RBRACE:
+        raise r.refuse("malformed")
+    r.pos += 1
+    r.depth -= 1
+    if seen & 3 != 3:
+        raise r.refuse("missing_field")
+    _size = len(v.cursor.encode("utf-8", "surrogatepass"))
+    if _size > 512: raise r.refuse("bad_value")
+    if any(c < "\x20" or "\x7f" <= c <= "\x9f" for c in v.cursor): raise r.refuse("bad_value")
+    if v.corrupt_offset < 0 or v.corrupt_offset > 262144: raise r.refuse("bad_value")
+    if v.age_ms is not None:
+        if v.age_ms < 0 or v.age_ms > 9223372036854775807: raise r.refuse("bad_value")
+    _size = len(v.cause.encode("utf-8", "surrogatepass"))
+    if _size > 512: raise r.refuse("bad_value")
+    if any(c < "\x20" or "\x7f" <= c <= "\x9f" for c in v.cause): raise r.refuse("bad_value")
+    try:
+        v.outcome = ObservationOutcomeV2(v.outcome)
+    except ValueError:
+        raise r.refuse("bad_enum") from None
+    return v
+
+
+def _read_describe_result(r):
+    if r.at() != _LBRACE:
+        raise r.refuse("wrong_type")
+    _check_encoded_size(r, 262144)
+    r.enter()
+    r.pos += 1
+    v = DescribeResult()
+    seen = 0
+    r.ws()
+    if r.at() != _RBRACE:
+        while True:
+            r.ws()
+            if r.at() != _QUOTE:
+                raise r.refuse("malformed")
+            key = r.string()
+            r.ws()
+            if r.at() != _COLON:
+                raise r.refuse("malformed")
+            r.pos += 1
+            r.ws()
+            if key == "outcome":
+                if seen & 1:
+                    raise r.refuse("duplicate_field")
+                seen |= 1
+                v.outcome = r.string()
+            elif key == "descriptors":
+                if seen & 2:
+                    raise r.refuse("duplicate_field")
+                seen |= 2
+                v.descriptors = _read_list(r, _read_key_descriptor)
+            elif key == "refusal":
+                if seen & 4:
+                    raise r.refuse("duplicate_field")
+                seen |= 4
+                v.refusal = _read_oa_imported0(r)
+            else:
+                r.skip_value()
+            r.ws()
+            if r.at() != _COMMA:
+                break
+            r.pos += 1
+    if r.at() != _RBRACE:
+        raise r.refuse("malformed")
+    r.pos += 1
+    r.depth -= 1
+    if seen & 3 != 3:
+        raise r.refuse("missing_field")
+    _size = len(v.descriptors)
+    if _size > 64: raise r.refuse("bad_value")
+    try:
+        v.outcome = ReadOutcome(v.outcome)
+    except ValueError:
+        raise r.refuse("bad_enum") from None
+    return v
+
+
 def _read_oa_config_reader_read_arguments(r):
     if r.at() != _LBRACE:
         raise r.refuse("wrong_type")
@@ -1711,6 +4211,219 @@ def _read_oa_config_observer_observe_arguments(r):
     r.depth -= 1
     if seen & 7 != 7:
         raise r.refuse("missing_field")
+    return v
+
+
+def _read_oa_config_reader_v2_read_arguments(r):
+    if r.at() != _LBRACE:
+        raise r.refuse("wrong_type")
+    r.enter()
+    r.pos += 1
+    v = _ConfigReaderV2ReadArguments()
+    seen = 0
+    r.ws()
+    if r.at() != _RBRACE:
+        while True:
+            r.ws()
+            if r.at() != _QUOTE:
+                raise r.refuse("malformed")
+            key = r.string()
+            r.ws()
+            if r.at() != _COLON:
+                raise r.refuse("malformed")
+            r.pos += 1
+            r.ws()
+            if key == "names":
+                if seen & 1:
+                    raise r.refuse("duplicate_field")
+                seen |= 1
+                v.names = r.str_list()
+            else:
+                raise r.refuse("unknown_field")
+            r.ws()
+            if r.at() != _COMMA:
+                break
+            r.pos += 1
+    if r.at() != _RBRACE:
+        raise r.refuse("malformed")
+    r.pos += 1
+    r.depth -= 1
+    if seen & 1 != 1:
+        raise r.refuse("missing_field")
+    _size = len(v.names)
+    if _size > 64: raise r.refuse("bad_value")
+    if isinstance(v.names, list):
+        for oa_element in v.names:
+            _size = len(oa_element.encode("utf-8", "surrogatepass"))
+            if _size < 1 or _size > 64: raise r.refuse("bad_value")
+    if isinstance(v.names, list):
+        for oa_element in v.names:
+            if not all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-" for c in oa_element): raise r.refuse("bad_value")
+    return v
+
+
+def _read_oa_config_reader_v2_describe_arguments(r):
+    if r.at() != _LBRACE:
+        raise r.refuse("wrong_type")
+    r.enter()
+    r.pos += 1
+    v = _ConfigReaderV2DescribeArguments()
+    seen = 0
+    r.ws()
+    if r.at() != _RBRACE:
+        while True:
+            r.ws()
+            if r.at() != _QUOTE:
+                raise r.refuse("malformed")
+            key = r.string()
+            r.ws()
+            if r.at() != _COLON:
+                raise r.refuse("malformed")
+            r.pos += 1
+            r.ws()
+            if False:
+                pass
+            else:
+                raise r.refuse("unknown_field")
+            r.ws()
+            if r.at() != _COMMA:
+                break
+            r.pos += 1
+    if r.at() != _RBRACE:
+        raise r.refuse("malformed")
+    r.pos += 1
+    r.depth -= 1
+    return v
+
+
+def _read_oa_config_editor_v2_read_user_arguments(r):
+    if r.at() != _LBRACE:
+        raise r.refuse("wrong_type")
+    r.enter()
+    r.pos += 1
+    v = _ConfigEditorV2ReadUserArguments()
+    seen = 0
+    r.ws()
+    if r.at() != _RBRACE:
+        while True:
+            r.ws()
+            if r.at() != _QUOTE:
+                raise r.refuse("malformed")
+            key = r.string()
+            r.ws()
+            if r.at() != _COLON:
+                raise r.refuse("malformed")
+            r.pos += 1
+            r.ws()
+            if False:
+                pass
+            else:
+                raise r.refuse("unknown_field")
+            r.ws()
+            if r.at() != _COMMA:
+                break
+            r.pos += 1
+    if r.at() != _RBRACE:
+        raise r.refuse("malformed")
+    r.pos += 1
+    r.depth -= 1
+    return v
+
+
+def _read_oa_config_editor_v2_replace_user_arguments(r):
+    if r.at() != _LBRACE:
+        raise r.refuse("wrong_type")
+    r.enter()
+    r.pos += 1
+    v = _ConfigEditorV2ReplaceUserArguments()
+    seen = 0
+    r.ws()
+    if r.at() != _RBRACE:
+        while True:
+            r.ws()
+            if r.at() != _QUOTE:
+                raise r.refuse("malformed")
+            key = r.string()
+            r.ws()
+            if r.at() != _COLON:
+                raise r.refuse("malformed")
+            r.pos += 1
+            r.ws()
+            if key == "expected_revision":
+                if seen & 1:
+                    raise r.refuse("duplicate_field")
+                seen |= 1
+                v.expected_revision = r.string()
+            elif key == "changes":
+                if seen & 2:
+                    raise r.refuse("duplicate_field")
+                seen |= 2
+                v.changes = _read_list(r, _read_change)
+            else:
+                raise r.refuse("unknown_field")
+            r.ws()
+            if r.at() != _COMMA:
+                break
+            r.pos += 1
+    if r.at() != _RBRACE:
+        raise r.refuse("malformed")
+    r.pos += 1
+    r.depth -= 1
+    if seen & 3 != 3:
+        raise r.refuse("missing_field")
+    _size = len(v.expected_revision.encode("utf-8", "surrogatepass"))
+    if _size < 64 or _size > 64: raise r.refuse("bad_value")
+    if not all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-" for c in v.expected_revision): raise r.refuse("bad_value")
+    _size = len(v.changes)
+    if _size > 16: raise r.refuse("bad_value")
+    return v
+
+
+def _read_oa_config_observer_v2_observe_arguments(r):
+    if r.at() != _LBRACE:
+        raise r.refuse("wrong_type")
+    r.enter()
+    r.pos += 1
+    v = _ConfigObserverV2ObserveArguments()
+    seen = 0
+    r.ws()
+    if r.at() != _RBRACE:
+        while True:
+            r.ws()
+            if r.at() != _QUOTE:
+                raise r.refuse("malformed")
+            key = r.string()
+            r.ws()
+            if r.at() != _COLON:
+                raise r.refuse("malformed")
+            r.pos += 1
+            r.ws()
+            if key == "cursor":
+                if seen & 1:
+                    raise r.refuse("duplicate_field")
+                seen |= 1
+                v.cursor = r.string()
+            elif key == "wait_ms":
+                if seen & 2:
+                    raise r.refuse("duplicate_field")
+                seen |= 2
+                v.wait_ms = r.integer(-9223372036854775808, 9223372036854775807)
+            else:
+                raise r.refuse("unknown_field")
+            r.ws()
+            if r.at() != _COMMA:
+                break
+            r.pos += 1
+    if r.at() != _RBRACE:
+        raise r.refuse("malformed")
+    r.pos += 1
+    r.depth -= 1
+    if seen & 3 != 3:
+        raise r.refuse("missing_field")
+    _size = len(v.cursor.encode("utf-8", "surrogatepass"))
+    if _size > 512: raise r.refuse("bad_value")
+    if any(c < "\x20" or "\x7f" <= c <= "\x9f" for c in v.cursor): raise r.refuse("bad_value")
+    if v.wait_ms < 0 or v.wait_ms > 30000: raise r.refuse("bad_value")
     return v
 
 
@@ -2027,6 +4740,201 @@ def _read_oa_config_observer_observe_result(r):
     return v
 
 
+def _read_oa_config_reader_v2_read_result(r):
+    if r.at() != _LBRACE:
+        raise r.refuse("wrong_type")
+    r.enter()
+    r.pos += 1
+    v = _ConfigReaderV2ReadResult()
+    seen = 0
+    r.ws()
+    if r.at() != _RBRACE:
+        while True:
+            r.ws()
+            if r.at() != _QUOTE:
+                raise r.refuse("malformed")
+            key = r.string()
+            r.ws()
+            if r.at() != _COLON:
+                raise r.refuse("malformed")
+            r.pos += 1
+            r.ws()
+            if key == "value":
+                if seen & 1:
+                    raise r.refuse("duplicate_field")
+                seen |= 1
+                v.value = _read_read_result(r)
+            else:
+                raise r.refuse("unknown_field")
+            r.ws()
+            if r.at() != _COMMA:
+                break
+            r.pos += 1
+    if r.at() != _RBRACE:
+        raise r.refuse("malformed")
+    r.pos += 1
+    r.depth -= 1
+    if seen & 1 != 1:
+        raise r.refuse("missing_field")
+    return v
+
+
+def _read_oa_config_reader_v2_describe_result(r):
+    if r.at() != _LBRACE:
+        raise r.refuse("wrong_type")
+    r.enter()
+    r.pos += 1
+    v = _ConfigReaderV2DescribeResult()
+    seen = 0
+    r.ws()
+    if r.at() != _RBRACE:
+        while True:
+            r.ws()
+            if r.at() != _QUOTE:
+                raise r.refuse("malformed")
+            key = r.string()
+            r.ws()
+            if r.at() != _COLON:
+                raise r.refuse("malformed")
+            r.pos += 1
+            r.ws()
+            if key == "value":
+                if seen & 1:
+                    raise r.refuse("duplicate_field")
+                seen |= 1
+                v.value = _read_describe_result(r)
+            else:
+                raise r.refuse("unknown_field")
+            r.ws()
+            if r.at() != _COMMA:
+                break
+            r.pos += 1
+    if r.at() != _RBRACE:
+        raise r.refuse("malformed")
+    r.pos += 1
+    r.depth -= 1
+    if seen & 1 != 1:
+        raise r.refuse("missing_field")
+    return v
+
+
+def _read_oa_config_editor_v2_read_user_result(r):
+    if r.at() != _LBRACE:
+        raise r.refuse("wrong_type")
+    r.enter()
+    r.pos += 1
+    v = _ConfigEditorV2ReadUserResult()
+    seen = 0
+    r.ws()
+    if r.at() != _RBRACE:
+        while True:
+            r.ws()
+            if r.at() != _QUOTE:
+                raise r.refuse("malformed")
+            key = r.string()
+            r.ws()
+            if r.at() != _COLON:
+                raise r.refuse("malformed")
+            r.pos += 1
+            r.ws()
+            if key == "value":
+                if seen & 1:
+                    raise r.refuse("duplicate_field")
+                seen |= 1
+                v.value = _read_user_read_result_v2(r)
+            else:
+                raise r.refuse("unknown_field")
+            r.ws()
+            if r.at() != _COMMA:
+                break
+            r.pos += 1
+    if r.at() != _RBRACE:
+        raise r.refuse("malformed")
+    r.pos += 1
+    r.depth -= 1
+    if seen & 1 != 1:
+        raise r.refuse("missing_field")
+    return v
+
+
+def _read_oa_config_editor_v2_replace_user_result(r):
+    if r.at() != _LBRACE:
+        raise r.refuse("wrong_type")
+    r.enter()
+    r.pos += 1
+    v = _ConfigEditorV2ReplaceUserResult()
+    seen = 0
+    r.ws()
+    if r.at() != _RBRACE:
+        while True:
+            r.ws()
+            if r.at() != _QUOTE:
+                raise r.refuse("malformed")
+            key = r.string()
+            r.ws()
+            if r.at() != _COLON:
+                raise r.refuse("malformed")
+            r.pos += 1
+            r.ws()
+            if key == "value":
+                if seen & 1:
+                    raise r.refuse("duplicate_field")
+                seen |= 1
+                v.value = _read_user_replace_result_v2(r)
+            else:
+                raise r.refuse("unknown_field")
+            r.ws()
+            if r.at() != _COMMA:
+                break
+            r.pos += 1
+    if r.at() != _RBRACE:
+        raise r.refuse("malformed")
+    r.pos += 1
+    r.depth -= 1
+    if seen & 1 != 1:
+        raise r.refuse("missing_field")
+    return v
+
+
+def _read_oa_config_observer_v2_observe_result(r):
+    if r.at() != _LBRACE:
+        raise r.refuse("wrong_type")
+    r.enter()
+    r.pos += 1
+    v = _ConfigObserverV2ObserveResult()
+    seen = 0
+    r.ws()
+    if r.at() != _RBRACE:
+        while True:
+            r.ws()
+            if r.at() != _QUOTE:
+                raise r.refuse("malformed")
+            key = r.string()
+            r.ws()
+            if r.at() != _COLON:
+                raise r.refuse("malformed")
+            r.pos += 1
+            r.ws()
+            if key == "value":
+                if seen & 1:
+                    raise r.refuse("duplicate_field")
+                seen |= 1
+                v.value = _read_config_observation_v2(r)
+            else:
+                raise r.refuse("unknown_field")
+            r.ws()
+            if r.at() != _COMMA:
+                break
+            r.pos += 1
+    if r.at() != _RBRACE:
+        raise r.refuse("malformed")
+    r.pos += 1
+    r.depth -= 1
+    if seen & 1 != 1:
+        raise r.refuse("missing_field")
+    return v
+
+
 def decode(data):
     r = _Reader(bytes(data))
     r.ws()
@@ -2037,9 +4945,62 @@ def decode(data):
     return v
 
 
+_JSON_RECORDS = {
+    RunOverrides: (_write_run_overrides, _read_run_overrides),
+    Origin: (_write_origin, _read_origin),
+    Origins: (_write_origins, _read_origins),
+    Snapshot: (_write_snapshot, _read_snapshot),
+    UserSettings: (_write_user_settings, _read_user_settings),
+    UserSnapshot: (_write_user_snapshot, _read_user_snapshot),
+    UserReplaceResult: (_write_user_replace_result, _read_user_replace_result),
+    ConfigObservation: (_write_config_observation, _read_config_observation),
+    Value: (_write_value, _read_value),
+    ConfigSource: (_write_config_source, _read_config_source),
+    KeyOrigin: (_write_key_origin, _read_key_origin),
+    Entry: (_write_entry, _read_entry),
+    ValueRange: (_write_value_range, _read_value_range),
+    KeyDescriptor: (_write_key_descriptor, _read_key_descriptor),
+    Change: (_write_change, _read_change),
+    KeyRefusal: (_write_key_refusal, _read_key_refusal),
+    KeyProblem: (_write_key_problem, _read_key_problem),
+    IgnoredField: (_write_ignored_field, _read_ignored_field),
+    ReadResult: (_write_read_result, _read_read_result),
+    UserSnapshotV2: (_write_user_snapshot_v2, _read_user_snapshot_v2),
+    UserReadResultV2: (_write_user_read_result_v2, _read_user_read_result_v2),
+    UserReplaceResultV2: (_write_user_replace_result_v2, _read_user_replace_result_v2),
+    ConfigObservationV2: (_write_config_observation_v2, _read_config_observation_v2),
+    DescribeResult: (_write_describe_result, _read_describe_result),
+}
+
+
+def to_json(value):
+    """One record as JSON bytes, laid out as this module's documents are and
+    without the document terminator."""
+    codec = _JSON_RECORDS.get(type(value))
+    if codec is None:
+        raise TypeError("to_json takes a record of this module, not %s" % type(value).__name__)
+    out = bytearray()
+    codec[0](out, value, 0)
+    return bytes(out)
+
+
+def from_json(kind, data):
+    """Read one record of class kind from data; a refused input raises Refusal."""
+    codec = _JSON_RECORDS.get(kind)
+    if codec is None:
+        raise TypeError("from_json takes a record class of this module, not %r" % (kind,))
+    r = _Reader(bytes(data))
+    r.ws()
+    v = codec[1](r)
+    r.ws()
+    if r.pos < len(r.buf):
+        raise r.refuse("trailing_bytes")
+    return v
+
+
 # _REFUSALS is in the order two of them are chosen between.
 
-_REFUSALS = ["malformed", "bad_string", "number_spelling", "wrong_type", "depth_exceeded", "duplicate_field", "unknown_field", "missing_field", "bad_enum", "trailing_bytes"]
+_REFUSALS = ["malformed", "bad_string", "number_spelling", "wrong_type", "depth_exceeded", "duplicate_field", "unknown_field", "missing_field", "bad_enum", "bad_value", "encoded_size", "trailing_bytes"]
 
 
 def _refusal_rank(word):
@@ -2112,6 +5073,11 @@ def _service_check(kind, value, depth=0):
             for key, item in value.items():
                 _service_check("string", key, depth + 1)
                 _service_check(kind[11:-1], item, depth + 1)
+    elif kind in _NAMED_IMPORTED:
+        cls, check = _NAMED_IMPORTED[kind]
+        valid = isinstance(value, cls)
+        if valid:
+            check(value, depth, _DEPTH_LIMIT)
     else:
         cls, fields = _SERVICE_RECORDS[kind]
         valid = isinstance(value, cls)
@@ -2166,10 +5132,31 @@ _SERVICE_RECORDS = {
     "UserSnapshot": (UserSnapshot, [("values", "UserSettings", "never"), ("revision", "string", "never"), ]),
     "UserReplaceResult": (UserReplaceResult, [("outcome", "enum", "never"), ("snapshot", "UserSnapshot", "never"), ]),
     "ConfigObservation": (ConfigObservation, [("outcome", "enum", "never"), ("cursor", "string", "never"), ("snapshot", "Snapshot", "absent"), ]),
+    "Value": (Value, [("kind", "enum", "never"), ("boolean", "bool", "zero"), ("integer", "i64", "zero"), ("bytes", "i64", "zero"), ("duration_ms", "i64", "zero"), ("text", "string", "zero"), ("choice", "string", "zero"), ("text_list", "list<string>", "zero"), ("text_map", "map<string,string>", "zero"), ]),
+    "ConfigSource": (ConfigSource, [("location", "enum", "never"), ("path", "string", "never"), ]),
+    "KeyOrigin": (KeyOrigin, [("location", "enum", "zero"), ("path", "string", "never"), ("state", "enum", "never"), ("reason", "string", "zero"), ("shadowed", "list<ConfigSource>", "zero"), ]),
+    "Entry": (Entry, [("key", "string", "never"), ("value", "Value", "absent"), ("origin", "KeyOrigin", "never"), ]),
+    "ValueRange": (ValueRange, [("min", "i64", "never"), ("max", "i64", "never"), ]),
+    "KeyDescriptor": (KeyDescriptor, [("key", "string", "never"), ("kind", "enum", "never"), ("default", "Value", "absent"), ("range", "ValueRange", "absent"), ("choices", "list<string>", "zero"), ("presets", "list<Value>", "zero"), ("description", "string", "never"), ("group", "string", "never"), ("apply", "enum", "never"), ("lockable", "bool", "never"), ("lowest_location", "enum", "never"), ("deprecated", "string", "zero"), ("default_description", "string", "zero"), ("allows_unlimited", "bool", "never"), ]),
+    "Change": (Change, [("key", "string", "never"), ("set", "Value", "absent"), ]),
+    "KeyRefusal": (KeyRefusal, [("key", "string", "never"), ("reason", "enum", "never"), ("refusal", "OAImported0", "absent"), ]),
+    "KeyProblem": (KeyProblem, [("key", "string", "never"), ("reason", "string", "never"), ]),
+    "IgnoredField": (IgnoredField, [("offset", "i64", "never"), ("name_excerpt", "string", "never"), ("reason", "enum", "never"), ("source", "ConfigSource", "never"), ]),
+    "ReadResult": (ReadResult, [("outcome", "enum", "never"), ("entries", "list<Entry>", "never"), ("revision", "string", "never"), ("refused", "list<KeyRefusal>", "zero"), ("problem", "KeyProblem", "absent"), ("corrupt_offset", "i64", "zero"), ("ignored_fields", "list<IgnoredField>", "zero"), ("ignored_omitted", "i64", "zero"), ("corrupt_source", "ConfigSource", "absent"), ("refusal", "OAImported0", "absent"), ]),
+    "UserSnapshotV2": (UserSnapshotV2, [("entries", "list<Entry>", "never"), ("revision", "string", "never"), ]),
+    "UserReadResultV2": (UserReadResultV2, [("outcome", "enum", "never"), ("snapshot", "UserSnapshotV2", "absent"), ("problem", "KeyProblem", "absent"), ("corrupt_offset", "i64", "zero"), ("refusal", "OAImported0", "absent"), ]),
+    "UserReplaceResultV2": (UserReplaceResultV2, [("outcome", "enum", "never"), ("snapshot", "UserSnapshotV2", "absent"), ("refused", "list<KeyProblem>", "zero"), ("corrupt_offset", "i64", "zero"), ("refusal", "OAImported0", "absent"), ]),
+    "ConfigObservationV2": (ConfigObservationV2, [("outcome", "enum", "never"), ("cursor", "string", "never"), ("snapshot", "ReadResult", "absent"), ("problem", "KeyProblem", "absent"), ("corrupt_offset", "i64", "zero"), ("corrupt_source", "ConfigSource", "absent"), ("refusal", "OAImported0", "absent"), ("age_ms", "i64", "absent"), ("cause", "string", "zero"), ]),
+    "DescribeResult": (DescribeResult, [("outcome", "enum", "never"), ("descriptors", "list<KeyDescriptor>", "never"), ("refusal", "OAImported0", "absent"), ]),
     "OAConfigReaderReadArguments": (_ConfigReaderReadArguments, [("overrides", "RunOverrides", "never"), ]),
     "OAConfigEditorReadUserArguments": (_ConfigEditorReadUserArguments, []),
     "OAConfigEditorReplaceUserArguments": (_ConfigEditorReplaceUserArguments, [("expected_revision", "string", "never"), ("values", "UserSettings", "never"), ]),
     "OAConfigObserverObserveArguments": (_ConfigObserverObserveArguments, [("overrides", "RunOverrides", "never"), ("cursor", "string", "never"), ("wait_ms", "i64", "never"), ]),
+    "OAConfigReaderV2ReadArguments": (_ConfigReaderV2ReadArguments, [("names", "list<string>", "never"), ]),
+    "OAConfigReaderV2DescribeArguments": (_ConfigReaderV2DescribeArguments, []),
+    "OAConfigEditorV2ReadUserArguments": (_ConfigEditorV2ReadUserArguments, []),
+    "OAConfigEditorV2ReplaceUserArguments": (_ConfigEditorV2ReplaceUserArguments, [("expected_revision", "string", "never"), ("changes", "list<Change>", "never"), ]),
+    "OAConfigObserverV2ObserveArguments": (_ConfigObserverV2ObserveArguments, [("cursor", "string", "never"), ("wait_ms", "i64", "never"), ]),
     "OAServiceFrame": (_ServiceFrame, [("version", "i32", "never"), ("service", "string", "never"), ("method", "string", "never"), ("arguments", "json", "never"), ]),
     "OAServiceReply": (_ServiceReply, [("version", "i32", "never"), ("service", "string", "never"), ("method", "string", "never"), ("ok", "bool", "never"), ("payload", "json", "never"), ]),
     "OAServiceError": (_ServiceError, [("code", "string", "never"), ("message", "string", "never"), ]),
@@ -2177,6 +5164,11 @@ _SERVICE_RECORDS = {
     "OAConfigEditorReadUserResult": (_ConfigEditorReadUserResult, [("value", "UserSnapshot", "never"), ]),
     "OAConfigEditorReplaceUserResult": (_ConfigEditorReplaceUserResult, [("value", "UserReplaceResult", "never"), ]),
     "OAConfigObserverObserveResult": (_ConfigObserverObserveResult, [("value", "ConfigObservation", "never"), ]),
+    "OAConfigReaderV2ReadResult": (_ConfigReaderV2ReadResult, [("value", "ReadResult", "never"), ]),
+    "OAConfigReaderV2DescribeResult": (_ConfigReaderV2DescribeResult, [("value", "DescribeResult", "never"), ]),
+    "OAConfigEditorV2ReadUserResult": (_ConfigEditorV2ReadUserResult, [("value", "UserReadResultV2", "never"), ]),
+    "OAConfigEditorV2ReplaceUserResult": (_ConfigEditorV2ReplaceUserResult, [("value", "UserReplaceResultV2", "never"), ]),
+    "OAConfigObserverV2ObserveResult": (_ConfigObserverV2ObserveResult, [("value", "ConfigObservationV2", "never"), ]),
 }
 
 
@@ -2209,10 +5201,11 @@ class ConfigReaderClient(ConfigReader):
 
 
 class ConfigEditor:
-    """Same-account Program-proven user editor on the config endpoint. The service
-    selects its private user path once. Caller claims cannot grant authority;
-    forbidden callers cause no storage access. Existing machine and run rungs
-    are unaffected."""
+    """Same-account
+    [Program](https://openabstractions.github.io/reference.html#concept-identity.listener-program-need)-proven
+    user editor on the config endpoint. The service selects its private user
+    path once. Caller claims cannot grant authority; forbidden callers cause no
+    storage access. Existing machine and run rungs are unaffected."""
 
     def read_user(self) -> UserSnapshot:
         """Read only the authenticated service user's persisted rung. No
@@ -2296,4 +5289,1260 @@ class ConfigObserverClient(ConfigObserver):
         _request = _service_request("abstraction.config/observer@1", "Observe", _arguments)
         _payload = _service_response(self._transport.exchange_frame(_request), "abstraction.config/observer@1", "Observe")
         _result = _service_decode(_read_oa_config_observer_observe_result, _payload, 1)
+        if (_result.value.outcome == "snapshot") != (_result.value.snapshot is not None):
+            raise ServiceError("invalid_result", "")
         return _result.value
+
+    def observe_pages(self, overrides: RunOverrides, cursor: str, wait_ms: int):
+        if type(wait_ms) is not int or not 0 <= wait_ms <= 30000:
+            raise ValueError("observe wait_ms is 0..30000")
+        _observe_client = self
+        class _ObservePages:
+            def __iter__(self): return self
+            def __next__(self):
+                nonlocal cursor
+                _observe_page = _observe_client.observe(overrides, cursor, wait_ms)
+                cursor = _observe_page.cursor
+                return _observe_page
+        return _ObservePages()
+
+
+class ConfigReaderV2:
+    """Typed catalogue settings and effective provenance. Uses the same
+    service-owned user/machine store as @1. No provider variable pass-through or
+    additional policy store."""
+
+    def read(self, names: list[str]) -> ReadResult:
+        """Read named keys; an empty list asks for every key this caller may read.
+        The runtime-designated provider's exact key grants are checked from
+        rechecked native identity. No self-asserted role or name grants a read.
+        A missing authority callback refuses. Process overrides are overlaid by
+        the generated client only."""
+        raise NotImplementedError
+
+    def describe(self) -> DescribeResult:
+        """Read the definition-owned validated key catalogue, bounded to 64
+        descriptors (CFG-S3). No values, identity claims or permission grants
+        are carried."""
+        raise NotImplementedError
+
+
+class ConfigReaderV2Client(ConfigReaderV2):
+    """Calls abstraction.config/reader@2 through a transport that exchanges frames."""
+
+    def __init__(self, transport):
+        self._transport = transport
+
+    def read(self, names: list[str]) -> ReadResult:
+        _service_check("list<string>", names)
+        _args = _ConfigReaderV2ReadArguments()
+        _args.names = names
+        _arguments = _service_encode(_write_oa_config_reader_v2_read_arguments, _args, 1)
+        _service_decode(_read_oa_config_reader_v2_read_arguments, _arguments, 1)
+        _request = _service_request("abstraction.config/reader@2", "Read", _arguments)
+        _payload = _service_response(self._transport.exchange_frame(_request), "abstraction.config/reader@2", "Read")
+        _result = _service_decode(_read_oa_config_reader_v2_read_result, _payload, 1)
+        if (_result.value.outcome == "corrupt") != (_result.value.corrupt_source is not None):
+            raise ServiceError("invalid_result", "")
+        return _result.value
+
+    def describe(self) -> DescribeResult:
+        _args = _ConfigReaderV2DescribeArguments()
+        _arguments = _service_encode(_write_oa_config_reader_v2_describe_arguments, _args, 1)
+        _service_decode(_read_oa_config_reader_v2_describe_arguments, _arguments, 1)
+        _request = _service_request("abstraction.config/reader@2", "Describe", _arguments)
+        _payload = _service_response(self._transport.exchange_frame(_request), "abstraction.config/reader@2", "Describe")
+        _result = _service_decode(_read_oa_config_reader_v2_describe_result, _payload, 1)
+        return _result.value
+
+
+class ConfigEditorV2:
+    """Same-account Program-proven user editor, narrowed by the current native edit
+    policy. Machine locks remain authoritative and cannot be overridden by
+    process values."""
+
+    def read_user(self) -> UserReadResultV2:
+        raise NotImplementedError
+
+    def replace_user(self, expected_revision: str, changes: list[Change]) -> UserReplaceResultV2:
+        """Atomically set/unset the whole batch under the existing
+        conditional-write owner. Compare user-content revision, validate every
+        change and machine lock before writing. Preserve all @1-only fields.
+        Unknown, duplicate, wrong-kind and out-of-range changes refuse as one
+        batch. No implicit rebase or retry."""
+        raise NotImplementedError
+
+
+class ConfigEditorV2Client(ConfigEditorV2):
+    """Calls abstraction.config/editor@2 through a transport that exchanges frames."""
+
+    def __init__(self, transport):
+        self._transport = transport
+
+    def read_user(self) -> UserReadResultV2:
+        _args = _ConfigEditorV2ReadUserArguments()
+        _arguments = _service_encode(_write_oa_config_editor_v2_read_user_arguments, _args, 1)
+        _service_decode(_read_oa_config_editor_v2_read_user_arguments, _arguments, 1)
+        _request = _service_request("abstraction.config/editor@2", "ReadUser", _arguments)
+        _payload = _service_response(self._transport.exchange_frame(_request), "abstraction.config/editor@2", "ReadUser")
+        _result = _service_decode(_read_oa_config_editor_v2_read_user_result, _payload, 1)
+        if (_result.value.outcome == "read") != (_result.value.snapshot is not None):
+            raise ServiceError("invalid_result", "")
+        return _result.value
+
+    def replace_user(self, expected_revision: str, changes: list[Change]) -> UserReplaceResultV2:
+        _service_check("string", expected_revision)
+        _service_check("list<Change>", changes)
+        _args = _ConfigEditorV2ReplaceUserArguments()
+        _args.expected_revision = expected_revision
+        _args.changes = changes
+        _arguments = _service_encode(_write_oa_config_editor_v2_replace_user_arguments, _args, 1)
+        _service_decode(_read_oa_config_editor_v2_replace_user_arguments, _arguments, 1)
+        _request = _service_request("abstraction.config/editor@2", "ReplaceUser", _arguments)
+        _payload = _service_response(self._transport.exchange_frame(_request), "abstraction.config/editor@2", "ReplaceUser")
+        _result = _service_decode(_read_oa_config_editor_v2_replace_user_result, _payload, 1)
+        return _result.value
+
+
+class ConfigObserverV2:
+    """Latest effective settings observation through the existing native source and
+    bounded watch gate; no polling loop."""
+
+    def observe(self, cursor: str, wait_ms: int) -> ConfigObservationV2:
+        """Observe effective values and lock/pending state through the existing
+        invalidation source. changed carries a fresh snapshot; unavailable may
+        carry the last authorized good snapshot with age_ms, absent when none
+        exists. failed ends observation with cause. wait_ms is 0..30000 and
+        cursor at most 512 bytes. Cancellation ends the wait only. Observation
+        remains caller-authorized and keeps no process override binding."""
+        raise NotImplementedError
+
+
+class ConfigObserverV2Client(ConfigObserverV2):
+    """Calls abstraction.config/observer@2 through a transport that exchanges frames."""
+
+    def __init__(self, transport):
+        self._transport = transport
+
+    def observe(self, cursor: str, wait_ms: int) -> ConfigObservationV2:
+        _service_check("string", cursor)
+        _service_check("i64", wait_ms)
+        _args = _ConfigObserverV2ObserveArguments()
+        _args.cursor = cursor
+        _args.wait_ms = wait_ms
+        _arguments = _service_encode(_write_oa_config_observer_v2_observe_arguments, _args, 1)
+        _service_decode(_read_oa_config_observer_v2_observe_arguments, _arguments, 1)
+        _request = _service_request("abstraction.config/observer@2", "Observe", _arguments)
+        _payload = _service_response(self._transport.exchange_frame(_request), "abstraction.config/observer@2", "Observe")
+        _result = _service_decode(_read_oa_config_observer_v2_observe_result, _payload, 1)
+        return _result.value
+
+    def observe_pages(self, cursor: str, wait_ms: int):
+        if type(wait_ms) is not int or not 0 <= wait_ms <= 30000:
+            raise ValueError("observe wait_ms is 0..30000")
+        _observe_client = self
+        class _ObservePages:
+            def __iter__(self): return self
+            def __next__(self):
+                nonlocal cursor
+                _observe_page = _observe_client.observe(cursor, wait_ms)
+                cursor = _observe_page.cursor
+                return _observe_page
+        return _ObservePages()
+
+
+CONFIG_CATALOGUE_JSON = "[{\"allows_unlimited\":true,\"apply\":\"live\",\"description\":\"Keep cached objects up to this size.\",\"group\":\"storage\",\"key\":\"cache_max_use\",\"kind\":\"bytes\",\"lockable\":true,\"lowest_location\":\"machine\",\"presets\":[{\"bytes\":4294967296,\"kind\":\"bytes\"},{\"bytes\":17179869184,\"kind\":\"bytes\"},{\"bytes\":68719476736,\"kind\":\"bytes\"},{\"kind\":\"unlimited\"}],\"range\":{\"max\":9223372036854775807,\"min\":0}},{\"allows_unlimited\":true,\"apply\":\"live\",\"description\":\"Keep cached objects for this long.\",\"group\":\"storage\",\"key\":\"cache_max_retention\",\"kind\":\"duration\",\"lockable\":true,\"lowest_location\":\"machine\",\"presets\":[{\"duration_ms\":604800000,\"kind\":\"duration\"},{\"duration_ms\":2592000000,\"kind\":\"duration\"},{\"duration_ms\":7776000000,\"kind\":\"duration\"},{\"kind\":\"unlimited\"}],\"range\":{\"max\":9223372036854,\"min\":0}},{\"allows_unlimited\":false,\"apply\":\"live\",\"default\":{\"duration_ms\":864000000,\"kind\":\"duration\"},\"description\":\"Keep temporary objects for this long.\",\"group\":\"storage\",\"key\":\"tmp_max_retention\",\"kind\":\"duration\",\"lockable\":true,\"lowest_location\":\"machine\",\"presets\":[{\"duration_ms\":86400000,\"kind\":\"duration\"},{\"duration_ms\":864000000,\"kind\":\"duration\"},{\"duration_ms\":2592000000,\"kind\":\"duration\"}],\"range\":{\"max\":9223372036854,\"min\":1}},{\"allows_unlimited\":true,\"apply\":\"live\",\"default_description\":\"10% of the drive, at most 4 GB\",\"description\":\"Keep logs up to this size.\",\"group\":\"storage\",\"key\":\"logs_max_use\",\"kind\":\"bytes\",\"lockable\":true,\"lowest_location\":\"machine\",\"presets\":[{\"bytes\":1073741824,\"kind\":\"bytes\"},{\"bytes\":4294967296,\"kind\":\"bytes\"},{\"bytes\":17179869184,\"kind\":\"bytes\"},{\"kind\":\"unlimited\"}],\"range\":{\"max\":9223372036854775807,\"min\":0}},{\"allows_unlimited\":true,\"apply\":\"live\",\"description\":\"Keep logs for this long.\",\"group\":\"storage\",\"key\":\"logs_max_retention\",\"kind\":\"duration\",\"lockable\":true,\"lowest_location\":\"machine\",\"presets\":[{\"duration_ms\":604800000,\"kind\":\"duration\"},{\"duration_ms\":2592000000,\"kind\":\"duration\"},{\"duration_ms\":7776000000,\"kind\":\"duration\"},{\"kind\":\"unlimited\"}],\"range\":{\"max\":9223372036854,\"min\":0}},{\"allows_unlimited\":false,\"apply\":\"live\",\"default\":{\"boolean\":true,\"kind\":\"boolean\"},\"description\":\"Start a closed agent to answer a question.\",\"group\":\"messages\",\"key\":\"messages_start_questions\",\"kind\":\"boolean\",\"lockable\":true,\"lowest_location\":\"machine\",\"presets\":[]},{\"allows_unlimited\":false,\"apply\":\"live\",\"default\":{\"kind\":\"boolean\"},\"description\":\"Start a closed agent for a note.\",\"group\":\"messages\",\"key\":\"messages_start_notes\",\"kind\":\"boolean\",\"lockable\":true,\"lowest_location\":\"machine\",\"presets\":[]},{\"allows_unlimited\":false,\"apply\":\"live\",\"choices\":[\"1\",\"2\",\"4\"],\"default\":{\"choice\":\"1\",\"kind\":\"choice\"},\"description\":\"Limit each agent to this many starts each hour.\",\"group\":\"messages\",\"key\":\"messages_start_per_hour\",\"kind\":\"choice\",\"lockable\":true,\"lowest_location\":\"machine\",\"presets\":[{\"choice\":\"1\",\"kind\":\"choice\"},{\"choice\":\"2\",\"kind\":\"choice\"},{\"choice\":\"4\",\"kind\":\"choice\"}]},{\"allows_unlimited\":false,\"apply\":\"live\",\"default\":{\"kind\":\"boolean\"},\"description\":\"Open the agent's app when it cannot start for a message.\",\"group\":\"messages\",\"key\":\"messages_start_open_app\",\"kind\":\"boolean\",\"lockable\":true,\"lowest_location\":\"machine\",\"presets\":[]},{\"allows_unlimited\":false,\"apply\":\"live\",\"default\":{\"boolean\":true,\"kind\":\"boolean\"},\"description\":\"Keep saved prompt data for faster replies.\",\"group\":\"models\",\"key\":\"prompt_cache_persist\",\"kind\":\"boolean\",\"lockable\":true,\"lowest_location\":\"machine\",\"presets\":[]},{\"allows_unlimited\":false,\"apply\":\"live\",\"default\":{\"bytes\":4294967296,\"kind\":\"bytes\"},\"description\":\"Keep saved prompt data up to this size.\",\"group\":\"models\",\"key\":\"prompt_cache_max_use\",\"kind\":\"bytes\",\"lockable\":true,\"lowest_location\":\"machine\",\"presets\":[{\"bytes\":2147483648,\"kind\":\"bytes\"},{\"bytes\":4294967296,\"kind\":\"bytes\"},{\"bytes\":8589934592,\"kind\":\"bytes\"},{\"bytes\":17179869184,\"kind\":\"bytes\"}],\"range\":{\"max\":9223372036854775807,\"min\":1}},{\"allows_unlimited\":false,\"apply\":\"live\",\"description\":\"Context each conversation gets, for each local model.\",\"group\":\"models\",\"key\":\"model_context\",\"kind\":\"text_map\",\"lockable\":true,\"lowest_location\":\"machine\",\"presets\":[]},{\"allows_unlimited\":false,\"apply\":\"restart\",\"description\":\"Network job store address.\",\"group\":\"downloads\",\"key\":\"nas_store\",\"kind\":\"text\",\"lockable\":false,\"lowest_location\":\"machine\",\"presets\":[]},{\"allows_unlimited\":false,\"apply\":\"live\",\"description\":\"Download delegates that are switched off, with their reasons.\",\"group\":\"downloads\",\"key\":\"disabled_download_delegates\",\"kind\":\"text_map\",\"lockable\":false,\"lowest_location\":\"machine\",\"presets\":[]}]"
+
+
+def validate_config_value(v):
+    if v is None or not ((v.kind == "unlimited" or v.kind == "boolean" or v.kind == "integer" or v.kind == "bytes" or v.kind == "duration" or v.kind == "text" or v.kind == "choice" or v.kind == "text_list" or v.kind == "text_map") and (v.kind == "boolean" or not v.boolean) and (v.kind == "integer" or v.integer == 0) and (v.kind == "bytes" or v.bytes == 0) and (v.kind == "duration" or v.duration_ms == 0) and (v.kind == "text" or v.text == "") and (v.kind == "choice" or v.choice == "") and (v.kind == "text_list" or not v.text_list) and (v.kind == "text_map" or not v.text_map)):
+        raise Refusal("bad_value", 0)
+    from_json(Value, to_json(v))
+
+
+def config_key_descriptors():
+    r = _Reader(CONFIG_CATALOGUE_JSON.encode("utf-8"))
+    r.ws()
+    rows = _read_list(r, _read_key_descriptor)
+    r.ws()
+    if r.pos != len(r.buf):
+        raise r.refuse("trailing_bytes")
+    return rows
+
+
+def overlay_config_process(entries, changes):
+    descriptors = {d.key: d for d in config_key_descriptors()}
+    pending = {}
+    for c in changes:
+        d = descriptors.get(c.key)
+        if d is None or c.key in pending:
+            raise Refusal("bad_value", 0)
+        pending[c.key] = None
+        if c.set is None:
+            continue
+        validate_config_value(c.set)
+        if (c.set.kind == "unlimited" and not d.allows_unlimited) or (c.set.kind != "unlimited" and c.set.kind != d.kind):
+            raise Refusal("bad_value", 0)
+        number = {"integer": c.set.integer, "bytes": c.set.bytes, "duration": c.set.duration_ms}.get(c.set.kind)
+        if number is not None and d.range is not None and not d.range.min <= number <= d.range.max:
+            raise Refusal("bad_value", 0)
+        if c.set.kind == "choice" and c.set.choice not in d.choices:
+            raise Refusal("bad_value", 0)
+        pending[c.key] = from_json(Value, to_json(c.set))
+    out = [from_json(Entry, to_json(e)) for e in entries]
+    for e in out:
+        value = pending.get(e.key)
+        if value is None or e.origin.state == "locked":
+            continue
+        d = descriptors[e.key]
+        if d.lowest_location not in ("machine", "user", "process"):
+            continue
+        shadowed = list(e.origin.shadowed)
+        if e.origin.location and e.origin.location != "process":
+            shadowed.insert(0, ConfigSource(location=e.origin.location, path=e.origin.path))
+        e.value = value
+        e.origin = KeyOrigin(location=Location.PROCESS, path="", state=KeyState.SET, shadowed=shadowed[:3])
+    return out
+
+
+def _write_oa_imported0(out, v, depth):
+    try:
+        out += _dependency_rights._encode_refusal_detail_at(v, depth)
+    except _dependency_rights.Refusal as e:
+        raise Refusal(e.word, e.offset) from e
+
+
+def _read_oa_imported0(r):
+    try:
+        v, n = _dependency_rights._decode_refusal_detail_at(r.buf[r.pos:], r.depth, r.limit)
+    except _dependency_rights.Refusal as e:
+        raise Refusal(e.word, r.pos + e.offset) from e
+    r.pos += n
+    return v
+
+
+_NAMED_IMPORTED = {}
+
+
+def _check_oa_imported0(v, depth, limit):
+    try:
+        _dependency_rights._check_refusal_detail(v, depth, limit)
+    except _dependency_rights.Refusal as e:
+        raise Refusal(e.word, e.offset) from e
+
+
+_NAMED_IMPORTED["OAImported0"] = (_Imported0, _check_oa_imported0)
+
+_NAMED_RECORDS = {
+    "RunOverrides": (RunOverrides, [("nas_store", "string", "never"), ("store", "string", "never"), ("log_sink", "string", "never"), ("log_service", "string", "never"), ]),
+    "Origin": (Origin, [("rung", "string", "never"), ("path", "string", "never"), ]),
+    "Origins": (Origins, [("nas_store", "Origin", "never"), ("store", "Origin", "never"), ("log_sink", "Origin", "never"), ("log_service", "Origin", "never"), ("off", "Origin", "never"), ]),
+    "Snapshot": (Snapshot, [("nas_store", "string", "never"), ("store", "string", "never"), ("log_sink", "string", "never"), ("log_service", "string", "never"), ("off", "map<string,string>", "never"), ("origins", "Origins", "never"), ("stamp", "string", "never"), ]),
+    "UserSettings": (UserSettings, [("nas_store", "string", "never"), ("store", "string", "never"), ("log_sink", "string", "never"), ("log_service", "string", "never"), ("off", "map<string,string>", "never"), ]),
+    "UserSnapshot": (UserSnapshot, [("values", "UserSettings", "never"), ("revision", "string", "never"), ]),
+    "UserReplaceResult": (UserReplaceResult, [("outcome", "enum", "never"), ("snapshot", "UserSnapshot", "never"), ]),
+    "ConfigObservation": (ConfigObservation, [("outcome", "enum", "never"), ("cursor", "string", "never"), ("snapshot", "Snapshot", "absent"), ]),
+    "Value": (Value, [("kind", "enum", "never"), ("boolean", "bool", "zero"), ("integer", "i64", "zero"), ("bytes", "i64", "zero"), ("duration_ms", "i64", "zero"), ("text", "string", "zero"), ("choice", "string", "zero"), ("text_list", "list<string>", "zero"), ("text_map", "map<string,string>", "zero"), ]),
+    "ConfigSource": (ConfigSource, [("location", "enum", "never"), ("path", "string", "never"), ]),
+    "KeyOrigin": (KeyOrigin, [("location", "enum", "zero"), ("path", "string", "never"), ("state", "enum", "never"), ("reason", "string", "zero"), ("shadowed", "list<ConfigSource>", "zero"), ]),
+    "Entry": (Entry, [("key", "string", "never"), ("value", "Value", "absent"), ("origin", "KeyOrigin", "never"), ]),
+    "ValueRange": (ValueRange, [("min", "i64", "never"), ("max", "i64", "never"), ]),
+    "KeyDescriptor": (KeyDescriptor, [("key", "string", "never"), ("kind", "enum", "never"), ("default", "Value", "absent"), ("range", "ValueRange", "absent"), ("choices", "list<string>", "zero"), ("presets", "list<Value>", "zero"), ("description", "string", "never"), ("group", "string", "never"), ("apply", "enum", "never"), ("lockable", "bool", "never"), ("lowest_location", "enum", "never"), ("deprecated", "string", "zero"), ("default_description", "string", "zero"), ("allows_unlimited", "bool", "never"), ]),
+    "Change": (Change, [("key", "string", "never"), ("set", "Value", "absent"), ]),
+    "KeyRefusal": (KeyRefusal, [("key", "string", "never"), ("reason", "enum", "never"), ("refusal", "OAImported0", "absent"), ]),
+    "KeyProblem": (KeyProblem, [("key", "string", "never"), ("reason", "string", "never"), ]),
+    "IgnoredField": (IgnoredField, [("offset", "i64", "never"), ("name_excerpt", "string", "never"), ("reason", "enum", "never"), ("source", "ConfigSource", "never"), ]),
+    "ReadResult": (ReadResult, [("outcome", "enum", "never"), ("entries", "list<Entry>", "never"), ("revision", "string", "never"), ("refused", "list<KeyRefusal>", "zero"), ("problem", "KeyProblem", "absent"), ("corrupt_offset", "i64", "zero"), ("ignored_fields", "list<IgnoredField>", "zero"), ("ignored_omitted", "i64", "zero"), ("corrupt_source", "ConfigSource", "absent"), ("refusal", "OAImported0", "absent"), ]),
+    "UserSnapshotV2": (UserSnapshotV2, [("entries", "list<Entry>", "never"), ("revision", "string", "never"), ]),
+    "UserReadResultV2": (UserReadResultV2, [("outcome", "enum", "never"), ("snapshot", "UserSnapshotV2", "absent"), ("problem", "KeyProblem", "absent"), ("corrupt_offset", "i64", "zero"), ("refusal", "OAImported0", "absent"), ]),
+    "UserReplaceResultV2": (UserReplaceResultV2, [("outcome", "enum", "never"), ("snapshot", "UserSnapshotV2", "absent"), ("refused", "list<KeyProblem>", "zero"), ("corrupt_offset", "i64", "zero"), ("refusal", "OAImported0", "absent"), ]),
+    "ConfigObservationV2": (ConfigObservationV2, [("outcome", "enum", "never"), ("cursor", "string", "never"), ("snapshot", "ReadResult", "absent"), ("problem", "KeyProblem", "absent"), ("corrupt_offset", "i64", "zero"), ("corrupt_source", "ConfigSource", "absent"), ("refusal", "OAImported0", "absent"), ("age_ms", "i64", "absent"), ("cause", "string", "zero"), ]),
+    "DescribeResult": (DescribeResult, [("outcome", "enum", "never"), ("descriptors", "list<KeyDescriptor>", "never"), ("refusal", "OAImported0", "absent"), ]),
+}
+
+
+def _named_check(kind, value, depth=0, limit=_DEPTH_LIMIT):
+    # Python coercions must not silently change typed service arguments.
+    if depth >= limit and (kind.startswith(("list<", "map<")) or kind in _NAMED_RECORDS):
+        raise Refusal("depth_exceeded", 0)
+    if kind == "binary":
+        valid = type(value) is bytes
+    elif kind == "string":
+        valid = type(value) is str
+    elif kind == "enum":
+        valid = value is None or isinstance(value, str)
+    elif kind in ("i32", "i64"):
+        valid = type(value) is int
+        if valid:
+            limit = 1 << (31 if kind == "i32" else 63)
+            if not -limit <= value < limit:
+                raise Refusal("number_spelling", 0)
+    elif kind == "bool":
+        valid = type(value) is bool
+    elif kind == "json":
+        valid = isinstance(value, (str, bytes, bytearray, memoryview))
+    elif kind.startswith("list<"):
+        valid = type(value) is list
+        if valid:
+            for item in value:
+                _named_check(kind[5:-1], item, depth + 1, limit)
+    elif kind.startswith("map<string,"):
+        valid = type(value) is dict
+        if valid:
+            for key, item in value.items():
+                _named_check("string", key, depth + 1, limit)
+                _named_check(kind[11:-1], item, depth + 1, limit)
+    elif kind in _NAMED_IMPORTED:
+        cls, check = _NAMED_IMPORTED[kind]
+        valid = isinstance(value, cls)
+        if valid:
+            check(value, depth, limit)
+    else:
+        cls, fields = _NAMED_RECORDS[kind]
+        valid = isinstance(value, cls)
+        if valid:
+            for name, field_kind, omit in fields:
+                if not hasattr(value, name):
+                    raise Refusal("missing_field", 0)
+                item = getattr(value, name)
+                if omit == "absent" and item is None:
+                    continue
+                _named_check(field_kind, item, depth + 1, limit)
+    if not valid:
+        raise Refusal("wrong_type", 0)
+
+
+def _check_run_overrides(v, depth=0, limit=_DEPTH_LIMIT):
+    _named_check("RunOverrides", v, depth, min(limit, _DEPTH_LIMIT))
+
+
+def _check_origin(v, depth=0, limit=_DEPTH_LIMIT):
+    _named_check("Origin", v, depth, min(limit, _DEPTH_LIMIT))
+
+
+def _check_origins(v, depth=0, limit=_DEPTH_LIMIT):
+    _named_check("Origins", v, depth, min(limit, _DEPTH_LIMIT))
+
+
+def _check_snapshot(v, depth=0, limit=_DEPTH_LIMIT):
+    _named_check("Snapshot", v, depth, min(limit, _DEPTH_LIMIT))
+
+
+def _check_user_settings(v, depth=0, limit=_DEPTH_LIMIT):
+    _named_check("UserSettings", v, depth, min(limit, _DEPTH_LIMIT))
+
+
+def _check_user_snapshot(v, depth=0, limit=_DEPTH_LIMIT):
+    _named_check("UserSnapshot", v, depth, min(limit, _DEPTH_LIMIT))
+
+
+def _check_user_replace_result(v, depth=0, limit=_DEPTH_LIMIT):
+    _named_check("UserReplaceResult", v, depth, min(limit, _DEPTH_LIMIT))
+
+
+def _check_config_observation(v, depth=0, limit=_DEPTH_LIMIT):
+    _named_check("ConfigObservation", v, depth, min(limit, _DEPTH_LIMIT))
+
+
+def _check_value(v, depth=0, limit=_DEPTH_LIMIT):
+    _named_check("Value", v, depth, min(limit, _DEPTH_LIMIT))
+
+
+def _check_config_source(v, depth=0, limit=_DEPTH_LIMIT):
+    _named_check("ConfigSource", v, depth, min(limit, _DEPTH_LIMIT))
+
+
+def _check_key_origin(v, depth=0, limit=_DEPTH_LIMIT):
+    _named_check("KeyOrigin", v, depth, min(limit, _DEPTH_LIMIT))
+
+
+def _check_entry(v, depth=0, limit=_DEPTH_LIMIT):
+    _named_check("Entry", v, depth, min(limit, _DEPTH_LIMIT))
+
+
+def _check_value_range(v, depth=0, limit=_DEPTH_LIMIT):
+    _named_check("ValueRange", v, depth, min(limit, _DEPTH_LIMIT))
+
+
+def _check_key_descriptor(v, depth=0, limit=_DEPTH_LIMIT):
+    _named_check("KeyDescriptor", v, depth, min(limit, _DEPTH_LIMIT))
+
+
+def _check_change(v, depth=0, limit=_DEPTH_LIMIT):
+    _named_check("Change", v, depth, min(limit, _DEPTH_LIMIT))
+
+
+def _check_key_refusal(v, depth=0, limit=_DEPTH_LIMIT):
+    _named_check("KeyRefusal", v, depth, min(limit, _DEPTH_LIMIT))
+
+
+def _check_key_problem(v, depth=0, limit=_DEPTH_LIMIT):
+    _named_check("KeyProblem", v, depth, min(limit, _DEPTH_LIMIT))
+
+
+def _check_ignored_field(v, depth=0, limit=_DEPTH_LIMIT):
+    _named_check("IgnoredField", v, depth, min(limit, _DEPTH_LIMIT))
+
+
+def _check_read_result(v, depth=0, limit=_DEPTH_LIMIT):
+    _named_check("ReadResult", v, depth, min(limit, _DEPTH_LIMIT))
+
+
+def _check_user_snapshot_v2(v, depth=0, limit=_DEPTH_LIMIT):
+    _named_check("UserSnapshotV2", v, depth, min(limit, _DEPTH_LIMIT))
+
+
+def _check_user_read_result_v2(v, depth=0, limit=_DEPTH_LIMIT):
+    _named_check("UserReadResultV2", v, depth, min(limit, _DEPTH_LIMIT))
+
+
+def _check_user_replace_result_v2(v, depth=0, limit=_DEPTH_LIMIT):
+    _named_check("UserReplaceResultV2", v, depth, min(limit, _DEPTH_LIMIT))
+
+
+def _check_config_observation_v2(v, depth=0, limit=_DEPTH_LIMIT):
+    _named_check("ConfigObservationV2", v, depth, min(limit, _DEPTH_LIMIT))
+
+
+def _check_describe_result(v, depth=0, limit=_DEPTH_LIMIT):
+    _named_check("DescribeResult", v, depth, min(limit, _DEPTH_LIMIT))
+
+
+def _decode_run_overrides_at(data, depth, limit):
+    r = _Reader(bytes(data))
+    if depth < 0 or limit < 1:
+        raise r.refuse("depth_exceeded")
+    r.depth = depth
+    r.limit = min(limit, _DEPTH_LIMIT)
+    r.ws()
+    v = _read_run_overrides(r)
+    return v, r.pos
+
+
+def _encode_run_overrides_at(v, depth):
+    if depth < 0 or depth >= _DEPTH_LIMIT:
+        raise _Reader(b"").refuse("depth_exceeded")
+    _check_run_overrides(v, depth, _DEPTH_LIMIT)
+    out = bytearray()
+    _write_run_overrides(out, v, depth)
+    _decode_run_overrides_at(out, depth, _DEPTH_LIMIT)
+    return bytes(out)
+
+
+def encode_run_overrides(v):
+    return _encode_run_overrides_at(v, 0) + "\n".encode()
+
+
+def decode_run_overrides(data):
+    v, n = _decode_run_overrides_at(data, 0, _DEPTH_LIMIT)
+    r = _Reader(bytes(data))
+    r.pos = n
+    r.ws()
+    if r.pos != len(r.buf):
+        raise r.refuse("trailing_bytes")
+    return v
+
+
+def _decode_origin_at(data, depth, limit):
+    r = _Reader(bytes(data))
+    if depth < 0 or limit < 1:
+        raise r.refuse("depth_exceeded")
+    r.depth = depth
+    r.limit = min(limit, _DEPTH_LIMIT)
+    r.ws()
+    v = _read_origin(r)
+    return v, r.pos
+
+
+def _encode_origin_at(v, depth):
+    if depth < 0 or depth >= _DEPTH_LIMIT:
+        raise _Reader(b"").refuse("depth_exceeded")
+    _check_origin(v, depth, _DEPTH_LIMIT)
+    out = bytearray()
+    _write_origin(out, v, depth)
+    _decode_origin_at(out, depth, _DEPTH_LIMIT)
+    return bytes(out)
+
+
+def encode_origin(v):
+    return _encode_origin_at(v, 0) + "\n".encode()
+
+
+def decode_origin(data):
+    v, n = _decode_origin_at(data, 0, _DEPTH_LIMIT)
+    r = _Reader(bytes(data))
+    r.pos = n
+    r.ws()
+    if r.pos != len(r.buf):
+        raise r.refuse("trailing_bytes")
+    return v
+
+
+def _decode_origins_at(data, depth, limit):
+    r = _Reader(bytes(data))
+    if depth < 0 or limit < 1:
+        raise r.refuse("depth_exceeded")
+    r.depth = depth
+    r.limit = min(limit, _DEPTH_LIMIT)
+    r.ws()
+    v = _read_origins(r)
+    return v, r.pos
+
+
+def _encode_origins_at(v, depth):
+    if depth < 0 or depth >= _DEPTH_LIMIT:
+        raise _Reader(b"").refuse("depth_exceeded")
+    _check_origins(v, depth, _DEPTH_LIMIT)
+    out = bytearray()
+    _write_origins(out, v, depth)
+    _decode_origins_at(out, depth, _DEPTH_LIMIT)
+    return bytes(out)
+
+
+def encode_origins(v):
+    return _encode_origins_at(v, 0) + "\n".encode()
+
+
+def decode_origins(data):
+    v, n = _decode_origins_at(data, 0, _DEPTH_LIMIT)
+    r = _Reader(bytes(data))
+    r.pos = n
+    r.ws()
+    if r.pos != len(r.buf):
+        raise r.refuse("trailing_bytes")
+    return v
+
+
+def _decode_snapshot_at(data, depth, limit):
+    r = _Reader(bytes(data))
+    if depth < 0 or limit < 1:
+        raise r.refuse("depth_exceeded")
+    r.depth = depth
+    r.limit = min(limit, _DEPTH_LIMIT)
+    r.ws()
+    v = _read_snapshot(r)
+    return v, r.pos
+
+
+def _encode_snapshot_at(v, depth):
+    if depth < 0 or depth >= _DEPTH_LIMIT:
+        raise _Reader(b"").refuse("depth_exceeded")
+    _check_snapshot(v, depth, _DEPTH_LIMIT)
+    out = bytearray()
+    _write_snapshot(out, v, depth)
+    _decode_snapshot_at(out, depth, _DEPTH_LIMIT)
+    return bytes(out)
+
+
+def encode_snapshot(v):
+    return _encode_snapshot_at(v, 0) + "\n".encode()
+
+
+def decode_snapshot(data):
+    v, n = _decode_snapshot_at(data, 0, _DEPTH_LIMIT)
+    r = _Reader(bytes(data))
+    r.pos = n
+    r.ws()
+    if r.pos != len(r.buf):
+        raise r.refuse("trailing_bytes")
+    return v
+
+
+def _decode_user_settings_at(data, depth, limit):
+    r = _Reader(bytes(data))
+    if depth < 0 or limit < 1:
+        raise r.refuse("depth_exceeded")
+    r.depth = depth
+    r.limit = min(limit, _DEPTH_LIMIT)
+    r.ws()
+    v = _read_user_settings(r)
+    return v, r.pos
+
+
+def _encode_user_settings_at(v, depth):
+    if depth < 0 or depth >= _DEPTH_LIMIT:
+        raise _Reader(b"").refuse("depth_exceeded")
+    _check_user_settings(v, depth, _DEPTH_LIMIT)
+    out = bytearray()
+    _write_user_settings(out, v, depth)
+    _decode_user_settings_at(out, depth, _DEPTH_LIMIT)
+    return bytes(out)
+
+
+def encode_user_settings(v):
+    return _encode_user_settings_at(v, 0) + "\n".encode()
+
+
+def decode_user_settings(data):
+    v, n = _decode_user_settings_at(data, 0, _DEPTH_LIMIT)
+    r = _Reader(bytes(data))
+    r.pos = n
+    r.ws()
+    if r.pos != len(r.buf):
+        raise r.refuse("trailing_bytes")
+    return v
+
+
+def _decode_user_snapshot_at(data, depth, limit):
+    r = _Reader(bytes(data))
+    if depth < 0 or limit < 1:
+        raise r.refuse("depth_exceeded")
+    r.depth = depth
+    r.limit = min(limit, _DEPTH_LIMIT)
+    r.ws()
+    v = _read_user_snapshot(r)
+    return v, r.pos
+
+
+def _encode_user_snapshot_at(v, depth):
+    if depth < 0 or depth >= _DEPTH_LIMIT:
+        raise _Reader(b"").refuse("depth_exceeded")
+    _check_user_snapshot(v, depth, _DEPTH_LIMIT)
+    out = bytearray()
+    _write_user_snapshot(out, v, depth)
+    _decode_user_snapshot_at(out, depth, _DEPTH_LIMIT)
+    return bytes(out)
+
+
+def encode_user_snapshot(v):
+    return _encode_user_snapshot_at(v, 0) + "\n".encode()
+
+
+def decode_user_snapshot(data):
+    v, n = _decode_user_snapshot_at(data, 0, _DEPTH_LIMIT)
+    r = _Reader(bytes(data))
+    r.pos = n
+    r.ws()
+    if r.pos != len(r.buf):
+        raise r.refuse("trailing_bytes")
+    return v
+
+
+def _decode_user_replace_result_at(data, depth, limit):
+    r = _Reader(bytes(data))
+    if depth < 0 or limit < 1:
+        raise r.refuse("depth_exceeded")
+    r.depth = depth
+    r.limit = min(limit, _DEPTH_LIMIT)
+    r.ws()
+    v = _read_user_replace_result(r)
+    return v, r.pos
+
+
+def _encode_user_replace_result_at(v, depth):
+    if depth < 0 or depth >= _DEPTH_LIMIT:
+        raise _Reader(b"").refuse("depth_exceeded")
+    _check_user_replace_result(v, depth, _DEPTH_LIMIT)
+    out = bytearray()
+    _write_user_replace_result(out, v, depth)
+    _decode_user_replace_result_at(out, depth, _DEPTH_LIMIT)
+    return bytes(out)
+
+
+def encode_user_replace_result(v):
+    return _encode_user_replace_result_at(v, 0) + "\n".encode()
+
+
+def decode_user_replace_result(data):
+    v, n = _decode_user_replace_result_at(data, 0, _DEPTH_LIMIT)
+    r = _Reader(bytes(data))
+    r.pos = n
+    r.ws()
+    if r.pos != len(r.buf):
+        raise r.refuse("trailing_bytes")
+    return v
+
+
+def _decode_config_observation_at(data, depth, limit):
+    r = _Reader(bytes(data))
+    if depth < 0 or limit < 1:
+        raise r.refuse("depth_exceeded")
+    r.depth = depth
+    r.limit = min(limit, _DEPTH_LIMIT)
+    r.ws()
+    v = _read_config_observation(r)
+    return v, r.pos
+
+
+def _encode_config_observation_at(v, depth):
+    if depth < 0 or depth >= _DEPTH_LIMIT:
+        raise _Reader(b"").refuse("depth_exceeded")
+    _check_config_observation(v, depth, _DEPTH_LIMIT)
+    out = bytearray()
+    _write_config_observation(out, v, depth)
+    _decode_config_observation_at(out, depth, _DEPTH_LIMIT)
+    return bytes(out)
+
+
+def encode_config_observation(v):
+    return _encode_config_observation_at(v, 0) + "\n".encode()
+
+
+def decode_config_observation(data):
+    v, n = _decode_config_observation_at(data, 0, _DEPTH_LIMIT)
+    r = _Reader(bytes(data))
+    r.pos = n
+    r.ws()
+    if r.pos != len(r.buf):
+        raise r.refuse("trailing_bytes")
+    return v
+
+
+def _decode_value_at(data, depth, limit):
+    r = _Reader(bytes(data))
+    if depth < 0 or limit < 1:
+        raise r.refuse("depth_exceeded")
+    r.depth = depth
+    r.limit = min(limit, _DEPTH_LIMIT)
+    r.ws()
+    v = _read_value(r)
+    return v, r.pos
+
+
+def _encode_value_at(v, depth):
+    if depth < 0 or depth >= _DEPTH_LIMIT:
+        raise _Reader(b"").refuse("depth_exceeded")
+    _check_value(v, depth, _DEPTH_LIMIT)
+    out = bytearray()
+    _write_value(out, v, depth)
+    _decode_value_at(out, depth, _DEPTH_LIMIT)
+    return bytes(out)
+
+
+def encode_value(v):
+    return _encode_value_at(v, 0) + "\n".encode()
+
+
+def decode_value(data):
+    v, n = _decode_value_at(data, 0, _DEPTH_LIMIT)
+    r = _Reader(bytes(data))
+    r.pos = n
+    r.ws()
+    if r.pos != len(r.buf):
+        raise r.refuse("trailing_bytes")
+    return v
+
+
+def _decode_config_source_at(data, depth, limit):
+    r = _Reader(bytes(data))
+    if depth < 0 or limit < 1:
+        raise r.refuse("depth_exceeded")
+    r.depth = depth
+    r.limit = min(limit, _DEPTH_LIMIT)
+    r.ws()
+    v = _read_config_source(r)
+    return v, r.pos
+
+
+def _encode_config_source_at(v, depth):
+    if depth < 0 or depth >= _DEPTH_LIMIT:
+        raise _Reader(b"").refuse("depth_exceeded")
+    _check_config_source(v, depth, _DEPTH_LIMIT)
+    out = bytearray()
+    _write_config_source(out, v, depth)
+    _decode_config_source_at(out, depth, _DEPTH_LIMIT)
+    return bytes(out)
+
+
+def encode_config_source(v):
+    return _encode_config_source_at(v, 0) + "\n".encode()
+
+
+def decode_config_source(data):
+    v, n = _decode_config_source_at(data, 0, _DEPTH_LIMIT)
+    r = _Reader(bytes(data))
+    r.pos = n
+    r.ws()
+    if r.pos != len(r.buf):
+        raise r.refuse("trailing_bytes")
+    return v
+
+
+def _decode_key_origin_at(data, depth, limit):
+    r = _Reader(bytes(data))
+    if depth < 0 or limit < 1:
+        raise r.refuse("depth_exceeded")
+    r.depth = depth
+    r.limit = min(limit, _DEPTH_LIMIT)
+    r.ws()
+    v = _read_key_origin(r)
+    return v, r.pos
+
+
+def _encode_key_origin_at(v, depth):
+    if depth < 0 or depth >= _DEPTH_LIMIT:
+        raise _Reader(b"").refuse("depth_exceeded")
+    _check_key_origin(v, depth, _DEPTH_LIMIT)
+    out = bytearray()
+    _write_key_origin(out, v, depth)
+    _decode_key_origin_at(out, depth, _DEPTH_LIMIT)
+    return bytes(out)
+
+
+def encode_key_origin(v):
+    return _encode_key_origin_at(v, 0) + "\n".encode()
+
+
+def decode_key_origin(data):
+    v, n = _decode_key_origin_at(data, 0, _DEPTH_LIMIT)
+    r = _Reader(bytes(data))
+    r.pos = n
+    r.ws()
+    if r.pos != len(r.buf):
+        raise r.refuse("trailing_bytes")
+    return v
+
+
+def _decode_entry_at(data, depth, limit):
+    r = _Reader(bytes(data))
+    if depth < 0 or limit < 1:
+        raise r.refuse("depth_exceeded")
+    r.depth = depth
+    r.limit = min(limit, _DEPTH_LIMIT)
+    r.ws()
+    v = _read_entry(r)
+    return v, r.pos
+
+
+def _encode_entry_at(v, depth):
+    if depth < 0 or depth >= _DEPTH_LIMIT:
+        raise _Reader(b"").refuse("depth_exceeded")
+    _check_entry(v, depth, _DEPTH_LIMIT)
+    out = bytearray()
+    _write_entry(out, v, depth)
+    _decode_entry_at(out, depth, _DEPTH_LIMIT)
+    return bytes(out)
+
+
+def encode_entry(v):
+    return _encode_entry_at(v, 0) + "\n".encode()
+
+
+def decode_entry(data):
+    v, n = _decode_entry_at(data, 0, _DEPTH_LIMIT)
+    r = _Reader(bytes(data))
+    r.pos = n
+    r.ws()
+    if r.pos != len(r.buf):
+        raise r.refuse("trailing_bytes")
+    return v
+
+
+def _decode_value_range_at(data, depth, limit):
+    r = _Reader(bytes(data))
+    if depth < 0 or limit < 1:
+        raise r.refuse("depth_exceeded")
+    r.depth = depth
+    r.limit = min(limit, _DEPTH_LIMIT)
+    r.ws()
+    v = _read_value_range(r)
+    return v, r.pos
+
+
+def _encode_value_range_at(v, depth):
+    if depth < 0 or depth >= _DEPTH_LIMIT:
+        raise _Reader(b"").refuse("depth_exceeded")
+    _check_value_range(v, depth, _DEPTH_LIMIT)
+    out = bytearray()
+    _write_value_range(out, v, depth)
+    _decode_value_range_at(out, depth, _DEPTH_LIMIT)
+    return bytes(out)
+
+
+def encode_value_range(v):
+    return _encode_value_range_at(v, 0) + "\n".encode()
+
+
+def decode_value_range(data):
+    v, n = _decode_value_range_at(data, 0, _DEPTH_LIMIT)
+    r = _Reader(bytes(data))
+    r.pos = n
+    r.ws()
+    if r.pos != len(r.buf):
+        raise r.refuse("trailing_bytes")
+    return v
+
+
+def _decode_key_descriptor_at(data, depth, limit):
+    r = _Reader(bytes(data))
+    if depth < 0 or limit < 1:
+        raise r.refuse("depth_exceeded")
+    r.depth = depth
+    r.limit = min(limit, _DEPTH_LIMIT)
+    r.ws()
+    v = _read_key_descriptor(r)
+    return v, r.pos
+
+
+def _encode_key_descriptor_at(v, depth):
+    if depth < 0 or depth >= _DEPTH_LIMIT:
+        raise _Reader(b"").refuse("depth_exceeded")
+    _check_key_descriptor(v, depth, _DEPTH_LIMIT)
+    out = bytearray()
+    _write_key_descriptor(out, v, depth)
+    _decode_key_descriptor_at(out, depth, _DEPTH_LIMIT)
+    return bytes(out)
+
+
+def encode_key_descriptor(v):
+    return _encode_key_descriptor_at(v, 0) + "\n".encode()
+
+
+def decode_key_descriptor(data):
+    v, n = _decode_key_descriptor_at(data, 0, _DEPTH_LIMIT)
+    r = _Reader(bytes(data))
+    r.pos = n
+    r.ws()
+    if r.pos != len(r.buf):
+        raise r.refuse("trailing_bytes")
+    return v
+
+
+def _decode_change_at(data, depth, limit):
+    r = _Reader(bytes(data))
+    if depth < 0 or limit < 1:
+        raise r.refuse("depth_exceeded")
+    r.depth = depth
+    r.limit = min(limit, _DEPTH_LIMIT)
+    r.ws()
+    v = _read_change(r)
+    return v, r.pos
+
+
+def _encode_change_at(v, depth):
+    if depth < 0 or depth >= _DEPTH_LIMIT:
+        raise _Reader(b"").refuse("depth_exceeded")
+    _check_change(v, depth, _DEPTH_LIMIT)
+    out = bytearray()
+    _write_change(out, v, depth)
+    _decode_change_at(out, depth, _DEPTH_LIMIT)
+    return bytes(out)
+
+
+def encode_change(v):
+    return _encode_change_at(v, 0) + "\n".encode()
+
+
+def decode_change(data):
+    v, n = _decode_change_at(data, 0, _DEPTH_LIMIT)
+    r = _Reader(bytes(data))
+    r.pos = n
+    r.ws()
+    if r.pos != len(r.buf):
+        raise r.refuse("trailing_bytes")
+    return v
+
+
+def _decode_key_refusal_at(data, depth, limit):
+    r = _Reader(bytes(data))
+    if depth < 0 or limit < 1:
+        raise r.refuse("depth_exceeded")
+    r.depth = depth
+    r.limit = min(limit, _DEPTH_LIMIT)
+    r.ws()
+    v = _read_key_refusal(r)
+    return v, r.pos
+
+
+def _encode_key_refusal_at(v, depth):
+    if depth < 0 or depth >= _DEPTH_LIMIT:
+        raise _Reader(b"").refuse("depth_exceeded")
+    _check_key_refusal(v, depth, _DEPTH_LIMIT)
+    out = bytearray()
+    _write_key_refusal(out, v, depth)
+    _decode_key_refusal_at(out, depth, _DEPTH_LIMIT)
+    return bytes(out)
+
+
+def encode_key_refusal(v):
+    return _encode_key_refusal_at(v, 0) + "\n".encode()
+
+
+def decode_key_refusal(data):
+    v, n = _decode_key_refusal_at(data, 0, _DEPTH_LIMIT)
+    r = _Reader(bytes(data))
+    r.pos = n
+    r.ws()
+    if r.pos != len(r.buf):
+        raise r.refuse("trailing_bytes")
+    return v
+
+
+def _decode_key_problem_at(data, depth, limit):
+    r = _Reader(bytes(data))
+    if depth < 0 or limit < 1:
+        raise r.refuse("depth_exceeded")
+    r.depth = depth
+    r.limit = min(limit, _DEPTH_LIMIT)
+    r.ws()
+    v = _read_key_problem(r)
+    return v, r.pos
+
+
+def _encode_key_problem_at(v, depth):
+    if depth < 0 or depth >= _DEPTH_LIMIT:
+        raise _Reader(b"").refuse("depth_exceeded")
+    _check_key_problem(v, depth, _DEPTH_LIMIT)
+    out = bytearray()
+    _write_key_problem(out, v, depth)
+    _decode_key_problem_at(out, depth, _DEPTH_LIMIT)
+    return bytes(out)
+
+
+def encode_key_problem(v):
+    return _encode_key_problem_at(v, 0) + "\n".encode()
+
+
+def decode_key_problem(data):
+    v, n = _decode_key_problem_at(data, 0, _DEPTH_LIMIT)
+    r = _Reader(bytes(data))
+    r.pos = n
+    r.ws()
+    if r.pos != len(r.buf):
+        raise r.refuse("trailing_bytes")
+    return v
+
+
+def _decode_ignored_field_at(data, depth, limit):
+    r = _Reader(bytes(data))
+    if depth < 0 or limit < 1:
+        raise r.refuse("depth_exceeded")
+    r.depth = depth
+    r.limit = min(limit, _DEPTH_LIMIT)
+    r.ws()
+    v = _read_ignored_field(r)
+    return v, r.pos
+
+
+def _encode_ignored_field_at(v, depth):
+    if depth < 0 or depth >= _DEPTH_LIMIT:
+        raise _Reader(b"").refuse("depth_exceeded")
+    _check_ignored_field(v, depth, _DEPTH_LIMIT)
+    out = bytearray()
+    _write_ignored_field(out, v, depth)
+    _decode_ignored_field_at(out, depth, _DEPTH_LIMIT)
+    return bytes(out)
+
+
+def encode_ignored_field(v):
+    return _encode_ignored_field_at(v, 0) + "\n".encode()
+
+
+def decode_ignored_field(data):
+    v, n = _decode_ignored_field_at(data, 0, _DEPTH_LIMIT)
+    r = _Reader(bytes(data))
+    r.pos = n
+    r.ws()
+    if r.pos != len(r.buf):
+        raise r.refuse("trailing_bytes")
+    return v
+
+
+def _decode_read_result_at(data, depth, limit):
+    r = _Reader(bytes(data))
+    if depth < 0 or limit < 1:
+        raise r.refuse("depth_exceeded")
+    r.depth = depth
+    r.limit = min(limit, _DEPTH_LIMIT)
+    r.ws()
+    v = _read_read_result(r)
+    return v, r.pos
+
+
+def _encode_read_result_at(v, depth):
+    if depth < 0 or depth >= _DEPTH_LIMIT:
+        raise _Reader(b"").refuse("depth_exceeded")
+    _check_read_result(v, depth, _DEPTH_LIMIT)
+    out = bytearray()
+    _write_read_result(out, v, depth)
+    _decode_read_result_at(out, depth, _DEPTH_LIMIT)
+    return bytes(out)
+
+
+def encode_read_result(v):
+    return _encode_read_result_at(v, 0) + "\n".encode()
+
+
+def decode_read_result(data):
+    v, n = _decode_read_result_at(data, 0, _DEPTH_LIMIT)
+    r = _Reader(bytes(data))
+    r.pos = n
+    r.ws()
+    if r.pos != len(r.buf):
+        raise r.refuse("trailing_bytes")
+    return v
+
+
+def _decode_user_snapshot_v2_at(data, depth, limit):
+    r = _Reader(bytes(data))
+    if depth < 0 or limit < 1:
+        raise r.refuse("depth_exceeded")
+    r.depth = depth
+    r.limit = min(limit, _DEPTH_LIMIT)
+    r.ws()
+    v = _read_user_snapshot_v2(r)
+    return v, r.pos
+
+
+def _encode_user_snapshot_v2_at(v, depth):
+    if depth < 0 or depth >= _DEPTH_LIMIT:
+        raise _Reader(b"").refuse("depth_exceeded")
+    _check_user_snapshot_v2(v, depth, _DEPTH_LIMIT)
+    out = bytearray()
+    _write_user_snapshot_v2(out, v, depth)
+    _decode_user_snapshot_v2_at(out, depth, _DEPTH_LIMIT)
+    return bytes(out)
+
+
+def encode_user_snapshot_v2(v):
+    return _encode_user_snapshot_v2_at(v, 0) + "\n".encode()
+
+
+def decode_user_snapshot_v2(data):
+    v, n = _decode_user_snapshot_v2_at(data, 0, _DEPTH_LIMIT)
+    r = _Reader(bytes(data))
+    r.pos = n
+    r.ws()
+    if r.pos != len(r.buf):
+        raise r.refuse("trailing_bytes")
+    return v
+
+
+def _decode_user_read_result_v2_at(data, depth, limit):
+    r = _Reader(bytes(data))
+    if depth < 0 or limit < 1:
+        raise r.refuse("depth_exceeded")
+    r.depth = depth
+    r.limit = min(limit, _DEPTH_LIMIT)
+    r.ws()
+    v = _read_user_read_result_v2(r)
+    return v, r.pos
+
+
+def _encode_user_read_result_v2_at(v, depth):
+    if depth < 0 or depth >= _DEPTH_LIMIT:
+        raise _Reader(b"").refuse("depth_exceeded")
+    _check_user_read_result_v2(v, depth, _DEPTH_LIMIT)
+    out = bytearray()
+    _write_user_read_result_v2(out, v, depth)
+    _decode_user_read_result_v2_at(out, depth, _DEPTH_LIMIT)
+    return bytes(out)
+
+
+def encode_user_read_result_v2(v):
+    return _encode_user_read_result_v2_at(v, 0) + "\n".encode()
+
+
+def decode_user_read_result_v2(data):
+    v, n = _decode_user_read_result_v2_at(data, 0, _DEPTH_LIMIT)
+    r = _Reader(bytes(data))
+    r.pos = n
+    r.ws()
+    if r.pos != len(r.buf):
+        raise r.refuse("trailing_bytes")
+    return v
+
+
+def _decode_user_replace_result_v2_at(data, depth, limit):
+    r = _Reader(bytes(data))
+    if depth < 0 or limit < 1:
+        raise r.refuse("depth_exceeded")
+    r.depth = depth
+    r.limit = min(limit, _DEPTH_LIMIT)
+    r.ws()
+    v = _read_user_replace_result_v2(r)
+    return v, r.pos
+
+
+def _encode_user_replace_result_v2_at(v, depth):
+    if depth < 0 or depth >= _DEPTH_LIMIT:
+        raise _Reader(b"").refuse("depth_exceeded")
+    _check_user_replace_result_v2(v, depth, _DEPTH_LIMIT)
+    out = bytearray()
+    _write_user_replace_result_v2(out, v, depth)
+    _decode_user_replace_result_v2_at(out, depth, _DEPTH_LIMIT)
+    return bytes(out)
+
+
+def encode_user_replace_result_v2(v):
+    return _encode_user_replace_result_v2_at(v, 0) + "\n".encode()
+
+
+def decode_user_replace_result_v2(data):
+    v, n = _decode_user_replace_result_v2_at(data, 0, _DEPTH_LIMIT)
+    r = _Reader(bytes(data))
+    r.pos = n
+    r.ws()
+    if r.pos != len(r.buf):
+        raise r.refuse("trailing_bytes")
+    return v
+
+
+def _decode_config_observation_v2_at(data, depth, limit):
+    r = _Reader(bytes(data))
+    if depth < 0 or limit < 1:
+        raise r.refuse("depth_exceeded")
+    r.depth = depth
+    r.limit = min(limit, _DEPTH_LIMIT)
+    r.ws()
+    v = _read_config_observation_v2(r)
+    return v, r.pos
+
+
+def _encode_config_observation_v2_at(v, depth):
+    if depth < 0 or depth >= _DEPTH_LIMIT:
+        raise _Reader(b"").refuse("depth_exceeded")
+    _check_config_observation_v2(v, depth, _DEPTH_LIMIT)
+    out = bytearray()
+    _write_config_observation_v2(out, v, depth)
+    _decode_config_observation_v2_at(out, depth, _DEPTH_LIMIT)
+    return bytes(out)
+
+
+def encode_config_observation_v2(v):
+    return _encode_config_observation_v2_at(v, 0) + "\n".encode()
+
+
+def decode_config_observation_v2(data):
+    v, n = _decode_config_observation_v2_at(data, 0, _DEPTH_LIMIT)
+    r = _Reader(bytes(data))
+    r.pos = n
+    r.ws()
+    if r.pos != len(r.buf):
+        raise r.refuse("trailing_bytes")
+    return v
+
+
+def _decode_describe_result_at(data, depth, limit):
+    r = _Reader(bytes(data))
+    if depth < 0 or limit < 1:
+        raise r.refuse("depth_exceeded")
+    r.depth = depth
+    r.limit = min(limit, _DEPTH_LIMIT)
+    r.ws()
+    v = _read_describe_result(r)
+    return v, r.pos
+
+
+def _encode_describe_result_at(v, depth):
+    if depth < 0 or depth >= _DEPTH_LIMIT:
+        raise _Reader(b"").refuse("depth_exceeded")
+    _check_describe_result(v, depth, _DEPTH_LIMIT)
+    out = bytearray()
+    _write_describe_result(out, v, depth)
+    _decode_describe_result_at(out, depth, _DEPTH_LIMIT)
+    return bytes(out)
+
+
+def encode_describe_result(v):
+    return _encode_describe_result_at(v, 0) + "\n".encode()
+
+
+def decode_describe_result(data):
+    v, n = _decode_describe_result_at(data, 0, _DEPTH_LIMIT)
+    r = _Reader(bytes(data))
+    r.pos = n
+    r.ws()
+    if r.pos != len(r.buf):
+        raise r.refuse("trailing_bytes")
+    return v

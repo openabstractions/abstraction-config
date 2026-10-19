@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.16)
+project(config_namespace_consumer LANGUAGES CXX)
+find_package(abstraction_config CONFIG REQUIRED)
+find_package(abstraction_logging CONFIG REQUIRED)
+find_package(abstraction_resource CONFIG REQUIRED)
+find_package(abstraction_router CONFIG REQUIRED)
+add_executable(config_namespace_consumer main.cpp)
+target_link_libraries(config_namespace_consumer PRIVATE abstraction::config_client abstraction::logging_client abstraction::resource_client abstraction::router_client)

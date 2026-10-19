@@ -170,3 +170,39 @@ exception and `CFG-X1`'s reworded sentence live in CONTRACT.md now, and
 `reader@2`/`editor@2`/`observer@2` major the finding requires. The
 glossary's *Rung* entry citing `CFG-R4` and the Panel's Settings caption
 are outside this module's `WRITES`.
+
+## 2026-10-21: contract truth pass (0.8.0 W0-03)
+
+The pass checked `CONTRACT.md` and the README against current source
+(`research/release-0.8.0/audit/config.md` §3.4). Each change, with its
+class:
+
+- `Read` answers `storage_unavailable` when a trusted machine or user file
+  cannot be read. Code defect for the machine file: `user_editor.go` ignores
+  a machine-file read failure (a TODO repair row). Accepted divergence for a
+  user file that does not parse: it reads as an empty user location, the
+  established fallback, while editing keeps the strict parser. The outcome
+  row says both.
+- "The process location MUST be the environment." Outdated rule: it is the
+  caller-supplied `RunOverrides` (`config.thrift`, `service.go`); the Panel
+  sends none.
+- `reader@2` in RENAME-PLAN §4's "second" release. Outdated rule: N14 moved
+  it to the fourth, and under one 0.8.0 version it lands with the plan's
+  config window W2-03. The record above of 2026-09-23 stays as written.
+- "No removal release is named yet" for the legacy provider. Outdated rule:
+  RENAME-PLAN N7 keeps it until the config Go module's next major version.
+- "Tiers" in the opening, CFG-X1, CFG-P1 and the README's `Off` sentence.
+  Outdated rule: RENAME-PLAN N15 and D92 name download delegates, stores and
+  sinks.
+- C++ resolving all three services. Outdated rule: the C++ facade has no
+  typed observer; "Not built" says so.
+- macOS "unproven throughout". Outdated rule: kqueue and the XPC edit proof
+  are in source, and no macOS transcript is recorded.
+- CFG-X1 says nobody is refused a read, while VISION's settings by name
+  (`VISION.md:1659`) make a provider's read of a named setting a revocable
+  grant. Accepted divergence until W3-06 lands that grant.
+- The seats document says NAS execution reads the config service's
+  `nas_store`; it reads the files directly at startup. Code defect outside
+  this page: a TODO repair row.
+- The remote form is stated as "Not built" with the receiver rule of
+  `research/release-0.8.0/critique/security.md` item 15.

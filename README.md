@@ -52,8 +52,9 @@ no authority to open it.
 ## Application clients
 
 Use the resolved clients through [the facade](https://github.com/openabstractions/abstraction-facade).
-Go, C++, Python and Rust (the facade's `rust-config` crate, `ConfigMachine`)
-resolve all three services. JavaScript resolves through the facade's
+Go, Python and Rust (the facade's `rust-config` crate, `ConfigMachine`)
+resolve all three services; C++ resolves the reader and the editor and has
+no typed observer. JavaScript resolves through the facade's
 `Machine.resolveService` and calls the generated `ConfigReaderClient`,
 `ConfigEditorClient` and `ConfigObserverClient` on the binding.
 
@@ -82,11 +83,12 @@ func main() {
 ```
 
 ```python
+from abstraction.facade import Scope
 from abstraction.facade.client import Machine
 from abstraction.config import RunOverrides
 
 machine = Machine(timeout=2)
-reader = machine.resolve_config(scope="local")
+reader = machine.resolve_config(scope=Scope.LOCAL)
 snapshot = reader.read(RunOverrides())
 print(snapshot.store, snapshot.origins.store.rung)
 ```
@@ -140,26 +142,23 @@ func main() {
 
 ## Legacy local provider (deprecated)
 
-`go/config.go` and `python/abstraction_config.py` retain the embedded
-file-reading provider the services above now front. It is deprecated, kept
-for a service, a setup step, or a deliberate out-of-tree adopter; no removal
-release is named yet. Applications do not call it.
+`go/config.go` retains the embedded file-reading provider used by the Go
+service. Its deprecated Go entrypoints remain until the config Go module's
+next major version. Python applications use the generated service client in
+`py/`; the former handwritten Python provider was removed from current 0.8
+source and distribution. Historical versions remain in Git.
 
 | deprecated name | applications use | a deliberate provider adopter calls |
 | --- | --- | --- |
 | Go `Load`, `LegacyLoad` | `facade.Discover().ResolveConfig` | `config.LoadWithOverrides(values)` |
 | Go `JobStore`, `LegacyJobStore` | the resolved job service and its receipts | nothing: the legacy job store has no locator since 0.2.0 |
 | Go `Watch`, `WatchQuiet`, `LegacyWatchQuiet` | a resolved config reader's snapshot observation | `config.WatchInvalidations`, then reread |
-| Python `load`, `watch`, `job_store` | `Machine.resolve_config()` | `legacy_load`, `legacy_watch`, `legacy_job_store` |
 
-Both are read paths: `LoadWithOverrides`/`legacy_load` read the machine file,
-then the user file, then the supplied overrides (Python: the environment), each
-overriding the last field by field, and
-return no error — a file that cannot be read or parsed is skipped, with one
-line on stderr saying which ([CFG-T2](CONTRACT.md)). Only the Go side writes:
-`config.Save(path, c)` and `config.Edit(path, change)` write through a
-temporary file and an atomic rename. There is no `Save` in Python; a machine is
-configured by the Go side, by an installer, or by hand.
+`LoadWithOverrides` reads the machine file, then the user file, then the
+supplied overrides, each overriding the last field by field. A file that
+cannot be read or parsed is skipped, with one line on stderr saying which
+([CFG-T2](CONTRACT.md)). `config.Save(path, c)` and `config.Edit(path, change)`
+write through a temporary file and an atomic rename.
 
 ```go
 package main
@@ -197,8 +196,8 @@ log sink: <temp dir>/abstraction.jsonl
 from: environment
 ```
 
-`Config` has four optional string fields (`NASStore`, `Store`, `LogSink`,
-`LogService`) plus `Off`, a map of tiers this machine will not hand work to
+[`Config`](https://openabstractions.github.io/reference.html#concept-config.machine-settings) has four optional string fields (`NASStore`, `Store`, `LogSink`,
+`LogService`) plus `Off`, a map of download delegates this machine will not hand work to
 with the reason a person gave. `Origin(key) Origin` and `Config.Describe()
 string` answer which authority set each key and render it for a `status`
 command. `UserPath()` and `MachinePath()` give this platform's conventional
@@ -213,15 +212,11 @@ on Windows, `~/Library/Application Support/openabstractions` on macOS and
 `$XDG_DATA_HOME/openabstractions` (default `~/.local/share`) on Linux. The
 runtime keeps `runtime-v1` there. `LegacyJobStore()` is `job-store` under
 it, the file job store's location when neither `store` nor
-`ABSTRACTION_STORE` names one; Python's `data_dir()` and `legacy_job_store()`
-resolve the same paths. No default resolves to a folder in the home folder
+`ABSTRACTION_STORE` names one. No default resolves to a folder in the home folder
 root such as `~/.abstraction`.
 
 `LoadWithOverrides` never reads this process's environment: a service passes
-the run overrides its caller supplied. The Python package's `legacy_user_path`
-is `user_path`; the
-Python object has no writer and raises `Untrusted` for a machine-wide file no
-administrator owns ([python/README.md](python/README.md)).
+the run overrides its caller supplied.
 
 ## Obtain
 
@@ -229,9 +224,8 @@ administrator owns ([python/README.md](python/README.md)).
   module path ends in `/go`; the package is `config`. Import it with an
   explicit alias. [Releases, newest first](https://github.com/openabstractions/abstraction-config/tags);
   pin the exact tag you tested against, or `@main` for the tree as it stands.
-- **Python.** Not on any package index. [What to install, import and call for
-  the resolved service client](py/README.md); [the legacy local
-  provider](python/README.md).
+- **Python.** [Install, import and call the generated service client](py/README.md)
+  from `abstraction-config-protocol`; the Go service owns the settings.
 - **C++.** [Generated interface and service client](cpp/README.md), using the
   shared IPC runtime and the Go service.
 - **Rust, JavaScript.** Generated wire types, codecs and service clients
@@ -259,10 +253,9 @@ settings alongside logging and jobs (see
 The locations, provenance and machine-file trust rules are stated in
 [CONTRACT.md](CONTRACT.md), each rule tagged and accounted for in
 [testdata/scenarios/rules.tsv](testdata/scenarios/rules.tsv). `go/corpus_test.go`
-and `python/test_corpus.py` replay the scenarios under
-[testdata/scenarios](testdata/scenarios) and compare each language's transcript
-against the recorded `.expected` file byte for byte; Go and Python agree
-through it. That corpus is internal to this module, not yet cited by the
+replays the scenarios under [testdata/scenarios](testdata/scenarios) and compares
+its transcript against the recorded `.expected` file byte for byte. Python
+uses the generated service binding to this Go implementation. That corpus is internal to this module, not yet cited by the
 parent project's cross-repository conformance suite
 (`conformance/capabilities.list`, `conformance/contracts.list`).
 
@@ -276,8 +269,9 @@ parent project's cross-repository conformance suite
 - Generated clients provide the wire interface; the Python artifact is
   vocabulary and transport injection only, with no separate Python config
   host — the service host is Go.
-- Every published transcript was produced on Windows or Linux; macOS is
-  unproven throughout.
+- Every published transcript was produced on Windows or Linux. macOS
+  source carries kqueue observation and the XPC edit proof; no macOS
+  transcript is recorded.
 
 ## Where it sits
 
@@ -296,10 +290,10 @@ hold an implementation to it.
 
 ## Requirements
 
-Go 1.26 or newer for the Go module. Python 3.9 or newer for the legacy provider,
-3.10 or newer for the generated protocol package. C++17 for the generated client.
+Go 1.26 or newer for the Go module. Python 3.10 or newer for the generated
+protocol package. C++17 for the generated client.
 No dependency outside the standard library and this project's own packages.
-Tested on Windows and Linux; macOS is unproven.
+Tested on Windows and Linux; no macOS transcript is recorded.
 
 ## Contract rules
 
@@ -320,6 +314,7 @@ This reference records compiled receiving support; RIGHTS.json names the compila
 
 | Action | Resource profile | Owning operations | First-use targets | Compiled receiver |
 |---|---|---|---|---|
-| `abstraction.config/user.replace` | `abstraction.rights/legacy-exact-string@1` | `abstraction.config/editor@1#ReplaceUser` | `none` | served in compiled context |
+| `abstraction.config/key.read` | `abstraction.rights/legacy-exact-string@1` | `abstraction.config/reader@2#Read`, `abstraction.config/observer@2#Observe` | `none` | served in compiled context |
+| `abstraction.config/user.replace` | `abstraction.rights/legacy-exact-string@1` | `abstraction.config/editor@1#ReplaceUser`, `abstraction.config/editor@2#ReplaceUser` | `none` | served in compiled context |
 
 <!-- END GENERATED PERMISSION DEFINITIONS -->

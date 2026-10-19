@@ -1,0 +1,200 @@
+{
+  "$defs": {
+    "Value": {
+      "additionalProperties": false,
+      "properties": {
+        "boolean": {
+          "type": "boolean"
+        },
+        "bytes": {
+          "maximum": 9223372036854775807,
+          "minimum": -9223372036854775808,
+          "type": "integer"
+        },
+        "choice": {
+          "pattern": "^[A-Za-z0-9_.-]*$",
+          "type": "string"
+        },
+        "duration_ms": {
+          "maximum": 9223372036854775807,
+          "minimum": -9223372036854775808,
+          "type": "integer"
+        },
+        "integer": {
+          "maximum": 9223372036854775807,
+          "minimum": -9223372036854775808,
+          "type": "integer"
+        },
+        "kind": {
+          "enum": [
+            "boolean",
+            "integer",
+            "bytes",
+            "duration",
+            "text",
+            "choice",
+            "text_list",
+            "text_map",
+            "unlimited"
+          ],
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 4096,
+          "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]*$",
+          "type": "string"
+        },
+        "text_list": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]*$",
+            "type": "string"
+          },
+          "maxItems": 128,
+          "type": "array"
+        },
+        "text_map": {
+          "additionalProperties": {
+            "maxLength": 512,
+            "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]*$",
+            "type": "string"
+          },
+          "maxProperties": 8,
+          "propertyNames": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_.-]*$",
+            "type": "string"
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "type": "object"
+    },
+    "ValueRange": {
+      "additionalProperties": true,
+      "properties": {
+        "max": {
+          "maximum": 9223372036854775807,
+          "minimum": -9223372036854775808,
+          "type": "integer"
+        },
+        "min": {
+          "maximum": 9223372036854775807,
+          "minimum": -9223372036854775808,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "min",
+        "max"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "properties": {
+    "allows_unlimited": {
+      "type": "boolean"
+    },
+    "apply": {
+      "enum": [
+        "live",
+        "restart"
+      ],
+      "type": "string"
+    },
+    "choices": {
+      "items": {
+        "maxLength": 64,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9_.-]*$",
+        "type": "string"
+      },
+      "maxItems": 16,
+      "type": "array"
+    },
+    "default": {
+      "$ref": "#/$defs/Value"
+    },
+    "default_description": {
+      "maxLength": 512,
+      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]*$",
+      "type": "string"
+    },
+    "deprecated": {
+      "maxLength": 512,
+      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]*$",
+      "type": "string"
+    },
+    "description": {
+      "maxLength": 512,
+      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]*$",
+      "type": "string"
+    },
+    "group": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_.-]*$",
+      "type": "string"
+    },
+    "key": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_.-]*$",
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "boolean",
+        "integer",
+        "bytes",
+        "duration",
+        "text",
+        "choice",
+        "text_list",
+        "text_map",
+        "unlimited"
+      ],
+      "type": "string"
+    },
+    "lockable": {
+      "type": "boolean"
+    },
+    "lowest_location": {
+      "enum": [
+        "machine",
+        "user",
+        "process"
+      ],
+      "type": "string"
+    },
+    "presets": {
+      "items": {
+        "$ref": "#/$defs/Value"
+      },
+      "maxItems": 16,
+      "type": "array"
+    },
+    "range": {
+      "$ref": "#/$defs/ValueRange"
+    }
+  },
+  "required": [
+    "key",
+    "kind",
+    "description",
+    "group",
+    "apply",
+    "lockable",
+    "lowest_location",
+    "allows_unlimited"
+  ],
+  "title": "KeyDescriptor",
+  "type": "object"
+}

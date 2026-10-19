@@ -2,55 +2,96 @@
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Open Abstractions — schema</title>
+<title>OpenAbstractions — schema</title>
 <link rel="stylesheet" href="style.css">
 
 <main>
-<nav class="site" aria-label="Primary navigation"><a class="name" href="index.html">Open Abstractions</a>
+<nav class="site" aria-label="Primary navigation"><a class="name" href="index.html">OpenAbstractions</a>
 <a href="adopt.html">Adopt</a><a href="cases.html">Cases</a><span class="nav-devs-label">for developers</span><a href="reference.html">Reference</a><a href="coverage.html">Coverage</a><a href="catalogue.html">Catalogue</a><a href="https://github.com/openabstractions">GitHub</a></nav>
 
 
 <h1>Schema</h1>
 <p class="lead">Use this reference to inspect fields, methods, accepted values and failure outcomes. For setup and working examples, start with the <a href="reference.html">API guide</a>.</p>
 <p>Definition: <code>abstraction.config</code></p>
-<nav aria-label="Schema sections" class="meta"><a href="#service-ConfigReader">ConfigReader</a> · <a href="#service-ConfigEditor">ConfigEditor</a> · <a href="#service-ConfigObserver">ConfigObserver</a> · <a href="#types">Types</a> · <a href="#structs">Fields</a> · <a href="#enums">Enumerations</a> · <a href="#constants">Constants</a> · <a href="#encoding">Encoding</a> · <a href="#refusals">Refusals</a></nav>
+<nav aria-label="Schema sections" class="meta"><a href="#service-ConfigReader">ConfigReader</a> · <a href="#service-ConfigEditor">ConfigEditor</a> · <a href="#service-ConfigObserver">ConfigObserver</a> · <a href="#service-ConfigReaderV2">ConfigReaderV2</a> · <a href="#service-ConfigEditorV2">ConfigEditorV2</a> · <a href="#service-ConfigObserverV2">ConfigObserverV2</a> · <a href="#types">Types</a> · <a href="#structs">Fields</a> · <a href="#enums">Enumerations</a> · <a href="#constants">Constants</a> · <a href="#encoding">Encoding</a> · <a href="#refusals">Refusals</a></nav>
 <h2 id="service-ConfigReader">Service <code>ConfigReader</code> <span class="tag">[DEF-S1]</span></h2>
 <p>Per-user configuration read service. Caller identity is checked independently of overrides.</p>
 <p>Wire identity: <code>abstraction.config/reader@1</code></p>
 <p>Handler error codes, declared by <code>reader_error_codes</code>: <code>storage_unavailable</code>, <code>caller_unavailable</code>, <code>identity_required</code>, <code>wrong_user</code>. Generated bindings name each as a ServiceErrorCode member beside the dispatcher's own codes.</p>
-<p>Multiple services share this namespace. Generated ServiceName (Go) and service_name (C++/Python) validate the request envelope and version before returning its service identity for routing. The selected generated dispatcher validates the method and typed arguments; the selector does not authorize callers or interpret method payloads.</p>
+<p>Multiple services share this namespace. Generated ServiceName (Go) and service_name (C++/Python) validate the request envelope and version before returning its service identity for routing. Go ServiceMethod returns the service and method routing pair through the same strict decoder, exposing no arguments. The selected generated dispatcher validates the method and typed arguments; these selectors do not authorize callers or establish a handler outcome.</p>
 <p>Frames carry version, service, method and typed arguments. Transport owns framing, associated exchanges, deadlines and connections. Unknown version/service/method and malformed arguments are rejected before invoking a handler. One-way WriteFrame success means local submission, not remote acceptance or persistence.</p>
 <p>Request-response methods use ExchangeFrame. Replies carry version, service, method, ok and payload; success payload contains typed value (or an empty object for void). Error payload contains nonempty code and message, which may be empty. ServiceError preserves unknown codes. Unexpected handler failures become handler_error without private details; invalid results become invalid_result. Clients validate reply identity and result before exposing it. A malformed frame or transport failure remains a local error; the transport must associate each response with its exchange. C++ dispatchers are pure protocol bindings, not listening servers.</p>
 <p>Read same-user machine/user configuration with explicit caller run overrides. No writes, watch or provider fallback.</p>
-<h3><code>Read</code></h3><p><code>request-response</code> <code>Snapshot</code></p><ul>
+<h3><code>Read</code></h3><p><code>request-response</code> <code>Snapshot</code> · readonly <span class="tag">[DEF-S3]</span></p><ul>
 <li>Argument 1: <code>RunOverrides</code> <code>overrides</code> (required, including zero/false/empty)</li>
 </ul>
 <h2 id="service-ConfigEditor">Service <code>ConfigEditor</code> <span class="tag">[DEF-S1]</span></h2>
-<p>Same-account Program-proven user editor on the config endpoint. The service selects its private user path once. Caller claims cannot grant authority; forbidden callers cause no storage access. Existing machine and run rungs are unaffected.</p>
+<p>Same-account <a href="https://openabstractions.github.io/reference.html#concept-identity.listener-program-need">Program</a>-proven user editor on the config endpoint. The service selects its private user path once. Caller claims cannot grant authority; forbidden callers cause no storage access. Existing machine and run rungs are unaffected.</p>
 <p>Wire identity: <code>abstraction.config/editor@1</code></p>
 <p>Handler error codes, declared by <code>editor_error_codes</code>: <code>invalid_revision</code>, <code>storage_unavailable</code>, <code>caller_unavailable</code>, <code>identity_required</code>, <code>wrong_user</code>. Generated bindings name each as a ServiceErrorCode member beside the dispatcher's own codes.</p>
-<p>Multiple services share this namespace. Generated ServiceName (Go) and service_name (C++/Python) validate the request envelope and version before returning its service identity for routing. The selected generated dispatcher validates the method and typed arguments; the selector does not authorize callers or interpret method payloads.</p>
+<p>Multiple services share this namespace. Generated ServiceName (Go) and service_name (C++/Python) validate the request envelope and version before returning its service identity for routing. Go ServiceMethod returns the service and method routing pair through the same strict decoder, exposing no arguments. The selected generated dispatcher validates the method and typed arguments; these selectors do not authorize callers or establish a handler outcome.</p>
 <p>Frames carry version, service, method and typed arguments. Transport owns framing, associated exchanges, deadlines and connections. Unknown version/service/method and malformed arguments are rejected before invoking a handler. One-way WriteFrame success means local submission, not remote acceptance or persistence.</p>
 <p>Request-response methods use ExchangeFrame. Replies carry version, service, method, ok and payload; success payload contains typed value (or an empty object for void). Error payload contains nonempty code and message, which may be empty. ServiceError preserves unknown codes. Unexpected handler failures become handler_error without private details; invalid results become invalid_result. Clients validate reply identity and result before exposing it. A malformed frame or transport failure remains a local error; the transport must associate each response with its exchange. C++ dispatchers are pure protocol bindings, not listening servers.</p>
 <p>Read only the authenticated service user&#39;s persisted rung. No environment or machine merge. Missing storage is empty; corrupt, unsupported or unavailable storage returns storage_unavailable.</p>
-<h3><code>ReadUser</code></h3><p><code>request-response</code> <code>UserSnapshot</code></p><ul>
+<h3><code>ReadUser</code></h3><p><code>request-response</code> <code>UserSnapshot</code> · readonly <span class="tag">[DEF-S3]</span></p><ul>
 </ul>
 <p>Compare the opaque revision and replace atomically through the selected conditional-write store. Stale revision returns conflict. Empty revision is invalid_revision. Storage failures return storage_unavailable. A configured edit policy is evaluated after same-account proof and before storage access: refusal returns forbidden and a failed decision returns unavailable. A canceled wait leaves write outcome unresolved; reread rather than blindly retry.</p>
-<h3><code>ReplaceUser</code></h3><p><code>request-response</code> <code>UserReplaceResult</code></p><ul>
+<h3><code>ReplaceUser</code></h3><p><code>request-response</code> <code>UserReplaceResult</code> · idempotent</p><ul>
 <li>Argument 1: <code>string</code> <code>expected_revision</code> (required, including zero/false/empty)</li>
 <li>Argument 2: <code>UserSettings</code> <code>values</code> (required, including zero/false/empty)</li>
 </ul>
 <h2 id="service-ConfigObserver">Service <code>ConfigObserver</code> <span class="tag">[DEF-S1]</span></h2>
 <p>Same-account latest-snapshot long-poll observation over a provider&#39;s explicit change notification source.</p>
 <p>Wire identity: <code>abstraction.config/observer@1</code></p>
-<p>Multiple services share this namespace. Generated ServiceName (Go) and service_name (C++/Python) validate the request envelope and version before returning its service identity for routing. The selected generated dispatcher validates the method and typed arguments; the selector does not authorize callers or interpret method payloads.</p>
+<p>Multiple services share this namespace. Generated ServiceName (Go) and service_name (C++/Python) validate the request envelope and version before returning its service identity for routing. Go ServiceMethod returns the service and method routing pair through the same strict decoder, exposing no arguments. The selected generated dispatcher validates the method and typed arguments; these selectors do not authorize callers or establish a handler outcome.</p>
 <p>Frames carry version, service, method and typed arguments. Transport owns framing, associated exchanges, deadlines and connections. Unknown version/service/method and malformed arguments are rejected before invoking a handler. One-way WriteFrame success means local submission, not remote acceptance or persistence.</p>
 <p>Request-response methods use ExchangeFrame. Replies carry version, service, method, ok and payload; success payload contains typed value (or an empty object for void). Error payload contains nonempty code and message, which may be empty. ServiceError preserves unknown codes. Unexpected handler failures become handler_error without private details; invalid results become invalid_result. Clients validate reply identity and result before exposing it. A malformed frame or transport failure remains a local error; the transport must associate each response with its exchange. C++ dispatchers are pure protocol bindings, not listening servers.</p>
 <p>Empty cursor reads the current snapshot. At the same revision, wait at most wait_ms (0..30000) for provider invalidation; reread on expiry. Cursor is at most 512 UTF-8 bytes and each override at most 4096 bytes. A slow consumer receives the latest revision; revisions include values and provenance. Missing change notification support gives unsupported. Bounded waiter exhaustion or provider notification failure gives unavailable. Caller cancellation stops observation waiting only; setting mutations retain their own lifetimes. Receiving account authority is rechecked before returning data.</p>
-<h3><code>Observe</code></h3><p><code>request-response</code> <code>ConfigObservation</code></p><ul>
+<h3><code>Observe</code></h3><p><code>request-response</code> <code>ConfigObservation</code> · readonly <span class="tag">[DEF-S3]</span></p><ul>
 <li>Argument 1: <code>RunOverrides</code> <code>overrides</code> (required, including zero/false/empty)</li>
 <li>Argument 2: <code>string</code> <code>cursor</code> (required, including zero/false/empty)</li>
 <li>Argument 3: <code>i64</code> <code>wait_ms</code> (required, including zero/false/empty)</li>
+</ul>
+<p>Service result postcondition: <code>snapshot</code> is present exactly when <code>outcome</code> is <code>snapshot</code>. Clients validate before return; dispatchers validate before reply. Standalone record codecs remain structural.</p>
+<h2 id="service-ConfigReaderV2">Service <code>ConfigReaderV2</code> <span class="tag">[DEF-S1]</span></h2>
+<p>Typed catalogue settings and effective provenance. Uses the same service-owned user/machine store as @1. No provider variable pass-through or additional policy store.</p>
+<p>Wire identity: <code>abstraction.config/reader@2</code></p>
+<p>Multiple services share this namespace. Generated ServiceName (Go) and service_name (C++/Python) validate the request envelope and version before returning its service identity for routing. Go ServiceMethod returns the service and method routing pair through the same strict decoder, exposing no arguments. The selected generated dispatcher validates the method and typed arguments; these selectors do not authorize callers or establish a handler outcome.</p>
+<p>Frames carry version, service, method and typed arguments. Transport owns framing, associated exchanges, deadlines and connections. Unknown version/service/method and malformed arguments are rejected before invoking a handler. One-way WriteFrame success means local submission, not remote acceptance or persistence.</p>
+<p>Request-response methods use ExchangeFrame. Replies carry version, service, method, ok and payload; success payload contains typed value (or an empty object for void). Error payload contains nonempty code and message, which may be empty. ServiceError preserves unknown codes. Unexpected handler failures become handler_error without private details; invalid results become invalid_result. Clients validate reply identity and result before exposing it. A malformed frame or transport failure remains a local error; the transport must associate each response with its exchange. C++ dispatchers are pure protocol bindings, not listening servers.</p>
+<p>Read named keys; an empty list asks for every key this caller may read. The runtime-designated provider&#39;s exact key grants are checked from rechecked native identity. No self-asserted role or name grants a read. A missing authority callback refuses. Process overrides are overlaid by the generated client only.</p>
+<h3><code>Read</code></h3><p><code>request-response</code> <code>ReadResult</code> · readonly <span class="tag">[DEF-S3]</span></p><ul>
+<li>Argument 1: <code>list&lt;string&gt;</code> <code>names</code> (required; length ..64 entries; element [] length 1..64 UTF-8 bytes; element [] pattern ascii_name; refusal <code>bad_value</code>, including zero/false/empty)</li>
+</ul>
+<p>Service result postcondition: <code>corrupt_source</code> is present exactly when <code>outcome</code> is <code>corrupt</code>. Clients validate before return; dispatchers validate before reply. Standalone record codecs remain structural.</p>
+<p>Read the definition-owned validated key catalogue, bounded to 64 descriptors (CFG-S3). No values, identity claims or permission grants are carried.</p>
+<h3><code>Describe</code></h3><p><code>request-response</code> <code>DescribeResult</code> · readonly</p><ul>
+</ul>
+<h2 id="service-ConfigEditorV2">Service <code>ConfigEditorV2</code> <span class="tag">[DEF-S1]</span></h2>
+<p>Same-account Program-proven user editor, narrowed by the current native edit policy. Machine locks remain authoritative and cannot be overridden by process values.</p>
+<p>Wire identity: <code>abstraction.config/editor@2</code></p>
+<p>Multiple services share this namespace. Generated ServiceName (Go) and service_name (C++/Python) validate the request envelope and version before returning its service identity for routing. Go ServiceMethod returns the service and method routing pair through the same strict decoder, exposing no arguments. The selected generated dispatcher validates the method and typed arguments; these selectors do not authorize callers or establish a handler outcome.</p>
+<p>Frames carry version, service, method and typed arguments. Transport owns framing, associated exchanges, deadlines and connections. Unknown version/service/method and malformed arguments are rejected before invoking a handler. One-way WriteFrame success means local submission, not remote acceptance or persistence.</p>
+<p>Request-response methods use ExchangeFrame. Replies carry version, service, method, ok and payload; success payload contains typed value (or an empty object for void). Error payload contains nonempty code and message, which may be empty. ServiceError preserves unknown codes. Unexpected handler failures become handler_error without private details; invalid results become invalid_result. Clients validate reply identity and result before exposing it. A malformed frame or transport failure remains a local error; the transport must associate each response with its exchange. C++ dispatchers are pure protocol bindings, not listening servers.</p>
+<p></p>
+<h3><code>ReadUser</code></h3><p><code>request-response</code> <code>UserReadResultV2</code> · readonly <span class="tag">[DEF-S3]</span></p><ul>
+</ul>
+<p>Service result postcondition: <code>snapshot</code> is present exactly when <code>outcome</code> is <code>read</code>. Clients validate before return; dispatchers validate before reply. Standalone record codecs remain structural.</p>
+<p>Atomically set/unset the whole batch under the existing conditional-write owner. Compare user-content revision, validate every change and machine lock before writing. Preserve all @1-only fields. Unknown, duplicate, wrong-kind and out-of-range changes refuse as one batch. No implicit rebase or retry.</p>
+<h3><code>ReplaceUser</code></h3><p><code>request-response</code> <code>UserReplaceResultV2</code> · idempotent</p><ul>
+<li>Argument 1: <code>string</code> <code>expected_revision</code> (required; length 64..64 UTF-8 bytes; pattern ascii_name; refusal <code>bad_value</code>, including zero/false/empty)</li>
+<li>Argument 2: <code>list&lt;Change&gt;</code> <code>changes</code> (required; length ..16 entries; refusal <code>bad_value</code>, including zero/false/empty)</li>
+</ul>
+<h2 id="service-ConfigObserverV2">Service <code>ConfigObserverV2</code> <span class="tag">[DEF-S1]</span></h2>
+<p>Latest effective settings observation through the existing native source and bounded watch gate; no polling loop.</p>
+<p>Wire identity: <code>abstraction.config/observer@2</code></p>
+<p>Multiple services share this namespace. Generated ServiceName (Go) and service_name (C++/Python) validate the request envelope and version before returning its service identity for routing. Go ServiceMethod returns the service and method routing pair through the same strict decoder, exposing no arguments. The selected generated dispatcher validates the method and typed arguments; these selectors do not authorize callers or establish a handler outcome.</p>
+<p>Frames carry version, service, method and typed arguments. Transport owns framing, associated exchanges, deadlines and connections. Unknown version/service/method and malformed arguments are rejected before invoking a handler. One-way WriteFrame success means local submission, not remote acceptance or persistence.</p>
+<p>Request-response methods use ExchangeFrame. Replies carry version, service, method, ok and payload; success payload contains typed value (or an empty object for void). Error payload contains nonempty code and message, which may be empty. ServiceError preserves unknown codes. Unexpected handler failures become handler_error without private details; invalid results become invalid_result. Clients validate reply identity and result before exposing it. A malformed frame or transport failure remains a local error; the transport must associate each response with its exchange. C++ dispatchers are pure protocol bindings, not listening servers.</p>
+<p>Observe effective values and lock/pending state through the existing invalidation source. changed carries a fresh snapshot; unavailable may carry the last authorized good snapshot with age_ms, absent when none exists. failed ends observation with cause. wait_ms is 0..30000 and cursor at most 512 bytes. Cancellation ends the wait only. Observation remains caller-authorized and keeps no process override binding.</p>
+<h3><code>Observe</code></h3><p><code>request-response</code> <code>ConfigObservationV2</code> · readonly <span class="tag">[DEF-S3]</span></p><ul>
+<li>Argument 1: <code>string</code> <code>cursor</code> (required; length ..512 UTF-8 bytes; pattern no_control; refusal <code>bad_value</code>, including zero/false/empty)</li>
+<li>Argument 2: <code>i64</code> <code>wait_ms</code> (required; range 0..30000; refusal <code>bad_value</code>, including zero/false/empty)</li>
 </ul>
 <h2 id="encoding">Encoding <span class="tag">[DEF-E1]</span></h2>
 <div class="wrap"><table>
@@ -69,9 +110,22 @@
 <div class="wrap"><table>
 <thead><tr><th>kind</th><th>types</th></tr></thead>
 <tbody>
-<tr><td>built in</td><td><code>ConfigObservationOutcome</code> <code>UserReplaceOutcome</code> <code>string</code></td></tr>
-<tr><td>declared below</td><td><code>Origin</code> <code>Origins</code> <code>Snapshot</code> <code>UserSettings</code> <code>UserSnapshot</code></td></tr>
+<tr><td>built in</td><td><code>ApplyMode</code> <code>ConfigObservationOutcome</code> <code>IgnoredFieldReason</code> <code>KeyRefusalReason</code> <code>KeyState</code> <code>Location</code> <code>ObservationOutcomeV2</code> <code>ReadOutcome</code> <code>ReplaceOutcome</code> <code>UserReplaceOutcome</code> <code>ValueKind</code> <code>bool</code> <code>i64</code> <code>string</code></td></tr>
+<tr><td>declared below</td><td><code>ConfigSource</code> <code>KeyOrigin</code> <code>KeyProblem</code> <code>Origin</code> <code>Origins</code> <code>ReadResult</code> <code>Snapshot</code> <code>UserSettings</code> <code>UserSnapshot</code> <code>UserSnapshotV2</code> <code>Value</code> <code>ValueRange</code> <code>rights.RefusalDetail</code></td></tr>
+<tr><td>container <span class="tag">[DEF-T3]</span></td><td><code>list&lt;string&gt;</code></td></tr>
+<tr><td>repeated record <span class="tag">[DEF-A9]</span></td><td><code>list&lt;ConfigSource&gt;</code> <code>list&lt;Entry&gt;</code> <code>list&lt;IgnoredField&gt;</code> <code>list&lt;KeyDescriptor&gt;</code> <code>list&lt;KeyProblem&gt;</code> <code>list&lt;KeyRefusal&gt;</code> <code>list&lt;Value&gt;</code></td></tr>
 <tr><td>string map <span class="tag">[DEF-A10]</span></td><td><code>map&lt;string,string&gt;</code></td></tr>
+</tbody></table></div>
+<h3 id="named-types">Named types <span class="tag">[DEF-T2]</span></h3>
+<p class="meta">One spelling is written <span class="tag">[DEF-G2]</span> and a wider set is read <span class="tag">[DEF-G1]</span>; the width between them is the interoperability guarantee.</p>
+<div class="wrap"><table>
+<thead><tr><th>name</th><th>is</th><th>written</th><th>read</th><th>constraints</th></tr></thead>
+<tbody>
+<tr><td><code>ConfigKey</code></td><td><code>string</code></td><td>—</td><td>—</td><td><code>length 1..64 UTF-8 bytes; pattern ascii_name</code></td></tr>
+<tr><td><code>ConfigText</code></td><td><code>string</code></td><td>—</td><td>—</td><td><code>length 0..4096 UTF-8 bytes; pattern no_control</code></td></tr>
+<tr><td><code>ConfigReason</code></td><td><code>string</code></td><td>—</td><td>—</td><td><code>length 0..512 UTF-8 bytes; pattern no_control</code></td></tr>
+<tr><td><code>ConfigName</code></td><td><code>string</code></td><td>—</td><td>—</td><td><code>length 1..128 UTF-8 bytes; pattern no_control</code></td></tr>
+<tr><td><code>ConfigRevision</code></td><td><code>string</code></td><td>—</td><td>—</td><td><code>length 0..64 UTF-8 bytes; pattern ascii_name</code></td></tr>
 </tbody></table></div>
 <h2 id="structs">Structs <span class="tag">[DEF-T1]</span></h2>
 <p class="meta">A field is required, or says when it is omitted <span class="tag">[DEF-A4]</span>. Each struct says on its own what it does with a field name it has never heard of <span class="tag">[DEF-A7]</span>. A wire name never moves; where a language must spell it differently the field says so <span class="tag">[DEF-A2]</span>.</p>
@@ -153,6 +207,182 @@
 <tr><td>2</td><td><code>cursor</code></td><td><code>string</code></td><td>required</td><td>—</td></tr>
 <tr><td>3</td><td><code>snapshot</code></td><td><code>Snapshot</code></td><td>optional · omitted when absent</td><td>—</td></tr>
 </tbody></table></div>
+<h3 id="struct-Value"><code>Value</code></h3>
+<p class="meta">unknown fields <code>refuse</code> · compact value span at most 262144 bytes; raw value span at most 1048576 bytes <span class="tag">[DEF-A12]</span></p>
+<div class="wrap"><table>
+<thead><tr><th>id</th><th>field</th><th>type</th><th>presence</th><th>named elsewhere</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>kind</code></td><td><code>ValueKind</code></td><td>required</td><td>—</td></tr>
+<tr><td>2</td><td><code>boolean</code></td><td><code>bool</code></td><td>optional · omitted when zero</td><td>—</td></tr>
+<tr><td>3</td><td><code>integer</code></td><td><code>i64</code></td><td>optional · omitted when zero</td><td>—</td></tr>
+<tr><td>4</td><td><code>bytes</code></td><td><code>i64</code></td><td>optional · omitted when zero</td><td>—</td></tr>
+<tr><td>5</td><td><code>duration_ms</code></td><td><code>i64</code></td><td>optional · omitted when zero</td><td>—</td></tr>
+<tr><td>6</td><td><code>text</code></td><td><code>ConfigText</code></td><td>optional · omitted when zero; length ..4096 UTF-8 bytes; pattern no_control; refusal <code>bad_value</code></td><td>—</td></tr>
+<tr><td>7</td><td><code>choice</code></td><td><code>ConfigKey</code></td><td>optional · omitted when zero; length 1..64 UTF-8 bytes; pattern ascii_name; refusal <code>bad_value</code></td><td>—</td></tr>
+<tr><td>8</td><td><code>text_list</code></td><td><code>list&lt;string&gt;</code></td><td>optional · omitted when zero; length ..128 entries; element [] length 1..128 UTF-8 bytes; element [] pattern no_control; refusal <code>bad_value</code></td><td>—</td></tr>
+<tr><td>9</td><td><code>text_map</code></td><td><code>map&lt;string,string&gt;</code></td><td>optional · omitted when zero; length ..8 entries; element [key] length 1..64 UTF-8 bytes; element [key] pattern ascii_name; element [value] length ..512 UTF-8 bytes; element [value] pattern no_control; refusal <code>bad_value</code></td><td>—</td></tr>
+</tbody></table></div>
+<h3 id="struct-ConfigSource"><code>ConfigSource</code></h3>
+<p class="meta">unknown fields <code>grant</code></p>
+<div class="wrap"><table>
+<thead><tr><th>id</th><th>field</th><th>type</th><th>presence</th><th>named elsewhere</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>location</code></td><td><code>Location</code></td><td>required</td><td>—</td></tr>
+<tr><td>2</td><td><code>path</code></td><td><code>ConfigText</code></td><td>required; length ..4096 UTF-8 bytes; pattern no_control; refusal <code>bad_value</code></td><td>—</td></tr>
+</tbody></table></div>
+<h3 id="struct-KeyOrigin"><code>KeyOrigin</code></h3>
+<p class="meta">unknown fields <code>grant</code></p>
+<div class="wrap"><table>
+<thead><tr><th>id</th><th>field</th><th>type</th><th>presence</th><th>named elsewhere</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>location</code></td><td><code>Location</code></td><td>optional · omitted when zero</td><td>—</td></tr>
+<tr><td>2</td><td><code>path</code></td><td><code>ConfigText</code></td><td>required; length ..4096 UTF-8 bytes; pattern no_control; refusal <code>bad_value</code></td><td>—</td></tr>
+<tr><td>3</td><td><code>state</code></td><td><code>KeyState</code></td><td>required</td><td>—</td></tr>
+<tr><td>4</td><td><code>reason</code></td><td><code>ConfigReason</code></td><td>optional · omitted when zero; length ..512 UTF-8 bytes; pattern no_control; refusal <code>bad_value</code></td><td>—</td></tr>
+<tr><td>5</td><td><code>shadowed</code></td><td><code>list&lt;ConfigSource&gt;</code></td><td>optional · omitted when zero; length ..3 entries; refusal <code>bad_value</code></td><td>—</td></tr>
+</tbody></table></div>
+<h3 id="struct-Entry"><code>Entry</code></h3>
+<p class="meta">unknown fields <code>grant</code></p>
+<div class="wrap"><table>
+<thead><tr><th>id</th><th>field</th><th>type</th><th>presence</th><th>named elsewhere</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>key</code></td><td><code>ConfigKey</code></td><td>required; length 1..64 UTF-8 bytes; pattern ascii_name; refusal <code>bad_value</code></td><td>—</td></tr>
+<tr><td>2</td><td><code>value</code></td><td><code>Value</code></td><td>optional · omitted when absent</td><td>—</td></tr>
+<tr><td>3</td><td><code>origin</code></td><td><code>KeyOrigin</code></td><td>required</td><td>—</td></tr>
+</tbody></table></div>
+<h3 id="struct-ValueRange"><code>ValueRange</code></h3>
+<p class="meta">unknown fields <code>grant</code></p>
+<div class="wrap"><table>
+<thead><tr><th>id</th><th>field</th><th>type</th><th>presence</th><th>named elsewhere</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>min</code></td><td><code>i64</code></td><td>required</td><td>—</td></tr>
+<tr><td>2</td><td><code>max</code></td><td><code>i64</code></td><td>required</td><td>—</td></tr>
+</tbody></table></div>
+<h3 id="struct-KeyDescriptor"><code>KeyDescriptor</code></h3>
+<p class="meta">unknown fields <code>grant</code> · compact value span at most 262144 bytes; raw value span at most 1048576 bytes</p>
+<div class="wrap"><table>
+<thead><tr><th>id</th><th>field</th><th>type</th><th>presence</th><th>named elsewhere</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>key</code></td><td><code>ConfigKey</code></td><td>required; length 1..64 UTF-8 bytes; pattern ascii_name; refusal <code>bad_value</code></td><td>—</td></tr>
+<tr><td>2</td><td><code>kind</code></td><td><code>ValueKind</code></td><td>required</td><td>—</td></tr>
+<tr><td>3</td><td><code>default</code></td><td><code>Value</code></td><td>optional · omitted when absent</td><td>—</td></tr>
+<tr><td>4</td><td><code>range</code></td><td><code>ValueRange</code></td><td>optional · omitted when absent</td><td>—</td></tr>
+<tr><td>5</td><td><code>choices</code></td><td><code>list&lt;string&gt;</code></td><td>optional · omitted when zero; length ..16 entries; element [] length 1..64 UTF-8 bytes; element [] pattern ascii_name; refusal <code>bad_value</code></td><td>—</td></tr>
+<tr><td>6</td><td><code>presets</code></td><td><code>list&lt;Value&gt;</code></td><td>optional · omitted when zero; length ..16 entries; refusal <code>bad_value</code></td><td>—</td></tr>
+<tr><td>7</td><td><code>description</code></td><td><code>ConfigReason</code></td><td>required; length ..512 UTF-8 bytes; pattern no_control; refusal <code>bad_value</code></td><td>—</td></tr>
+<tr><td>8</td><td><code>group</code></td><td><code>ConfigKey</code></td><td>required; length 1..64 UTF-8 bytes; pattern ascii_name; refusal <code>bad_value</code></td><td>—</td></tr>
+<tr><td>9</td><td><code>apply</code></td><td><code>ApplyMode</code></td><td>required</td><td>—</td></tr>
+<tr><td>10</td><td><code>lockable</code></td><td><code>bool</code></td><td>required</td><td>—</td></tr>
+<tr><td>11</td><td><code>lowest_location</code></td><td><code>Location</code></td><td>required</td><td>—</td></tr>
+<tr><td>12</td><td><code>deprecated</code></td><td><code>ConfigReason</code></td><td>optional · omitted when zero; length ..512 UTF-8 bytes; pattern no_control; refusal <code>bad_value</code></td><td>—</td></tr>
+<tr><td>13</td><td><code>default_description</code></td><td><code>ConfigReason</code></td><td>optional · omitted when zero; length ..512 UTF-8 bytes; pattern no_control; refusal <code>bad_value</code></td><td>—</td></tr>
+<tr><td>14</td><td><code>allows_unlimited</code></td><td><code>bool</code></td><td>required</td><td>—</td></tr>
+</tbody></table></div>
+<h3 id="struct-Change"><code>Change</code></h3>
+<p class="meta">unknown fields <code>refuse</code> · compact value span at most 65536 bytes; raw value span at most 1048576 bytes</p>
+<div class="wrap"><table>
+<thead><tr><th>id</th><th>field</th><th>type</th><th>presence</th><th>named elsewhere</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>key</code></td><td><code>ConfigKey</code></td><td>required; length 1..64 UTF-8 bytes; pattern ascii_name; refusal <code>bad_value</code></td><td>—</td></tr>
+<tr><td>2</td><td><code>set</code></td><td><code>Value</code></td><td>optional · omitted when absent</td><td>—</td></tr>
+</tbody></table></div>
+<h3 id="struct-KeyRefusal"><code>KeyRefusal</code></h3>
+<p class="meta">unknown fields <code>grant</code></p>
+<div class="wrap"><table>
+<thead><tr><th>id</th><th>field</th><th>type</th><th>presence</th><th>named elsewhere</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>key</code></td><td><code>ConfigKey</code></td><td>required; length 1..64 UTF-8 bytes; pattern ascii_name; refusal <code>bad_value</code></td><td>—</td></tr>
+<tr><td>2</td><td><code>reason</code></td><td><code>KeyRefusalReason</code></td><td>required</td><td>—</td></tr>
+<tr><td>3</td><td><code>refusal</code></td><td><code>rights.RefusalDetail</code></td><td>optional · omitted when absent</td><td>—</td></tr>
+</tbody></table></div>
+<h3 id="struct-KeyProblem"><code>KeyProblem</code></h3>
+<p class="meta">unknown fields <code>grant</code></p>
+<div class="wrap"><table>
+<thead><tr><th>id</th><th>field</th><th>type</th><th>presence</th><th>named elsewhere</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>key</code></td><td><code>ConfigKey</code></td><td>required; length 1..64 UTF-8 bytes; pattern ascii_name; refusal <code>bad_value</code></td><td>—</td></tr>
+<tr><td>2</td><td><code>reason</code></td><td><code>ConfigReason</code></td><td>required; length ..512 UTF-8 bytes; pattern no_control; refusal <code>bad_value</code></td><td>—</td></tr>
+</tbody></table></div>
+<h3 id="struct-IgnoredField"><code>IgnoredField</code></h3>
+<p class="meta">unknown fields <code>grant</code></p>
+<div class="wrap"><table>
+<thead><tr><th>id</th><th>field</th><th>type</th><th>presence</th><th>named elsewhere</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>offset</code></td><td><code>i64</code></td><td>required; range 0..262144; refusal <code>bad_value</code></td><td>—</td></tr>
+<tr><td>2</td><td><code>name_excerpt</code></td><td><code>string</code></td><td>required; length ..64 UTF-8 bytes; pattern no_control; refusal <code>bad_value</code></td><td>—</td></tr>
+<tr><td>3</td><td><code>reason</code></td><td><code>IgnoredFieldReason</code></td><td>required</td><td>—</td></tr>
+<tr><td>4</td><td><code>source</code></td><td><code>ConfigSource</code></td><td>required</td><td>—</td></tr>
+</tbody></table></div>
+<h3 id="struct-ReadResult"><code>ReadResult</code></h3>
+<p class="meta">unknown fields <code>grant</code> · compact value span at most 262144 bytes; raw value span at most 1048576 bytes</p>
+<div class="wrap"><table>
+<thead><tr><th>id</th><th>field</th><th>type</th><th>presence</th><th>named elsewhere</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>outcome</code></td><td><code>ReadOutcome</code></td><td>required</td><td>—</td></tr>
+<tr><td>2</td><td><code>entries</code></td><td><code>list&lt;Entry&gt;</code></td><td>required; length ..64 entries; refusal <code>bad_value</code></td><td>—</td></tr>
+<tr><td>3</td><td><code>revision</code></td><td><code>ConfigRevision</code></td><td>required; length ..64 UTF-8 bytes; pattern ascii_name; refusal <code>bad_value</code></td><td>—</td></tr>
+<tr><td>4</td><td><code>refused</code></td><td><code>list&lt;KeyRefusal&gt;</code></td><td>optional · omitted when zero; length ..64 entries; refusal <code>bad_value</code></td><td>—</td></tr>
+<tr><td>5</td><td><code>problem</code></td><td><code>KeyProblem</code></td><td>optional · omitted when absent</td><td>—</td></tr>
+<tr><td>6</td><td><code>corrupt_offset</code></td><td><code>i64</code></td><td>optional · omitted when zero; range 0..262144; refusal <code>bad_value</code></td><td>—</td></tr>
+<tr><td>7</td><td><code>ignored_fields</code></td><td><code>list&lt;IgnoredField&gt;</code></td><td>optional · omitted when zero; length ..16 entries; refusal <code>bad_value</code></td><td>—</td></tr>
+<tr><td>8</td><td><code>ignored_omitted</code></td><td><code>i64</code></td><td>optional · omitted when zero; range 0..262144; refusal <code>bad_value</code></td><td>—</td></tr>
+<tr><td>9</td><td><code>corrupt_source</code></td><td><code>ConfigSource</code></td><td>optional · omitted when absent</td><td>—</td></tr>
+<tr><td>10</td><td><code>refusal</code></td><td><code>rights.RefusalDetail</code></td><td>optional · omitted when absent</td><td>—</td></tr>
+</tbody></table></div>
+<h3 id="struct-UserSnapshotV2"><code>UserSnapshotV2</code></h3>
+<p class="meta">unknown fields <code>grant</code> · compact value span at most 262144 bytes; raw value span at most 1048576 bytes</p>
+<div class="wrap"><table>
+<thead><tr><th>id</th><th>field</th><th>type</th><th>presence</th><th>named elsewhere</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>entries</code></td><td><code>list&lt;Entry&gt;</code></td><td>required; length ..64 entries; refusal <code>bad_value</code></td><td>—</td></tr>
+<tr><td>2</td><td><code>revision</code></td><td><code>ConfigRevision</code></td><td>required; length ..64 UTF-8 bytes; pattern ascii_name; refusal <code>bad_value</code></td><td>—</td></tr>
+</tbody></table></div>
+<h3 id="struct-UserReadResultV2"><code>UserReadResultV2</code></h3>
+<p class="meta">unknown fields <code>grant</code></p>
+<div class="wrap"><table>
+<thead><tr><th>id</th><th>field</th><th>type</th><th>presence</th><th>named elsewhere</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>outcome</code></td><td><code>ReadOutcome</code></td><td>required</td><td>—</td></tr>
+<tr><td>2</td><td><code>snapshot</code></td><td><code>UserSnapshotV2</code></td><td>optional · omitted when absent</td><td>—</td></tr>
+<tr><td>3</td><td><code>problem</code></td><td><code>KeyProblem</code></td><td>optional · omitted when absent</td><td>—</td></tr>
+<tr><td>4</td><td><code>corrupt_offset</code></td><td><code>i64</code></td><td>optional · omitted when zero; range 0..262144; refusal <code>bad_value</code></td><td>—</td></tr>
+<tr><td>5</td><td><code>refusal</code></td><td><code>rights.RefusalDetail</code></td><td>optional · omitted when absent</td><td>—</td></tr>
+</tbody></table></div>
+<h3 id="struct-UserReplaceResultV2"><code>UserReplaceResultV2</code></h3>
+<p class="meta">unknown fields <code>grant</code> · compact value span at most 262144 bytes; raw value span at most 1048576 bytes</p>
+<div class="wrap"><table>
+<thead><tr><th>id</th><th>field</th><th>type</th><th>presence</th><th>named elsewhere</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>outcome</code></td><td><code>ReplaceOutcome</code></td><td>required</td><td>—</td></tr>
+<tr><td>2</td><td><code>snapshot</code></td><td><code>UserSnapshotV2</code></td><td>optional · omitted when absent</td><td>—</td></tr>
+<tr><td>3</td><td><code>refused</code></td><td><code>list&lt;KeyProblem&gt;</code></td><td>optional · omitted when zero; length ..64 entries; refusal <code>bad_value</code></td><td>—</td></tr>
+<tr><td>4</td><td><code>corrupt_offset</code></td><td><code>i64</code></td><td>optional · omitted when zero; range 0..262144; refusal <code>bad_value</code></td><td>—</td></tr>
+<tr><td>5</td><td><code>refusal</code></td><td><code>rights.RefusalDetail</code></td><td>optional · omitted when absent</td><td>—</td></tr>
+</tbody></table></div>
+<h3 id="struct-ConfigObservationV2"><code>ConfigObservationV2</code></h3>
+<p class="meta">unknown fields <code>grant</code> · compact value span at most 262144 bytes; raw value span at most 1048576 bytes</p>
+<div class="wrap"><table>
+<thead><tr><th>id</th><th>field</th><th>type</th><th>presence</th><th>named elsewhere</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>outcome</code></td><td><code>ObservationOutcomeV2</code></td><td>required</td><td>—</td></tr>
+<tr><td>2</td><td><code>cursor</code></td><td><code>string</code></td><td>required; length ..512 UTF-8 bytes; pattern no_control; refusal <code>bad_value</code></td><td>—</td></tr>
+<tr><td>3</td><td><code>snapshot</code></td><td><code>ReadResult</code></td><td>optional · omitted when absent</td><td>—</td></tr>
+<tr><td>4</td><td><code>problem</code></td><td><code>KeyProblem</code></td><td>optional · omitted when absent</td><td>—</td></tr>
+<tr><td>5</td><td><code>corrupt_offset</code></td><td><code>i64</code></td><td>optional · omitted when zero; range 0..262144; refusal <code>bad_value</code></td><td>—</td></tr>
+<tr><td>6</td><td><code>corrupt_source</code></td><td><code>ConfigSource</code></td><td>optional · omitted when absent</td><td>—</td></tr>
+<tr><td>7</td><td><code>refusal</code></td><td><code>rights.RefusalDetail</code></td><td>optional · omitted when absent</td><td>—</td></tr>
+<tr><td>8</td><td><code>age_ms</code></td><td><code>i64</code></td><td>optional · omitted when absent; range 0..9223372036854775807; refusal <code>bad_value</code></td><td>—</td></tr>
+<tr><td>9</td><td><code>cause</code></td><td><code>ConfigReason</code></td><td>optional · omitted when zero; length ..512 UTF-8 bytes; pattern no_control; refusal <code>bad_value</code></td><td>—</td></tr>
+</tbody></table></div>
+<h3 id="struct-DescribeResult"><code>DescribeResult</code></h3>
+<p class="meta">unknown fields <code>grant</code> · compact value span at most 262144 bytes; raw value span at most 1048576 bytes</p>
+<div class="wrap"><table>
+<thead><tr><th>id</th><th>field</th><th>type</th><th>presence</th><th>named elsewhere</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>outcome</code></td><td><code>ReadOutcome</code></td><td>required</td><td>—</td></tr>
+<tr><td>2</td><td><code>descriptors</code></td><td><code>list&lt;KeyDescriptor&gt;</code></td><td>required; length ..64 entries; refusal <code>bad_value</code></td><td>—</td></tr>
+<tr><td>3</td><td><code>refusal</code></td><td><code>rights.RefusalDetail</code></td><td>optional · omitted when absent</td><td>—</td></tr>
+</tbody></table></div>
 <h2 id="enums">Enumerations <span class="tag">[DEF-T5]</span></h2>
 <p>Enum fields carry JSON strings containing exact member wire spellings, never numeric IDs. Unknown names are preserved with grant and refused as bad_enum with refuse on read and write. Optional absent fields preserve presence separately from an empty string.</p>
 <p class="meta">An enumeration is a closed vocabulary of wire names, and each one says on its own what a reader does with a member it has never heard of <span class="tag">[DEF-A5]</span>.</p>
@@ -178,12 +408,113 @@
 <tr><td>5</td><td><code>unsupported</code></td><td><code>unsupported</code></td></tr>
 <tr><td>6</td><td><code>invalid</code></td><td><code>invalid</code></td></tr>
 </tbody></table></div>
+<h3 id="enum-ValueKind"><code>ValueKind</code></h3>
+<p class="meta">a member this reader does not know is <code>refuse</code></p>
+<div class="wrap"><table>
+<thead><tr><th>id</th><th>member</th><th>wire</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>boolean</code></td><td><code>boolean</code></td></tr>
+<tr><td>2</td><td><code>integer</code></td><td><code>integer</code></td></tr>
+<tr><td>3</td><td><code>bytes</code></td><td><code>bytes</code></td></tr>
+<tr><td>4</td><td><code>duration</code></td><td><code>duration</code></td></tr>
+<tr><td>5</td><td><code>text</code></td><td><code>text</code></td></tr>
+<tr><td>6</td><td><code>choice</code></td><td><code>choice</code></td></tr>
+<tr><td>7</td><td><code>text_list</code></td><td><code>text_list</code></td></tr>
+<tr><td>8</td><td><code>text_map</code></td><td><code>text_map</code></td></tr>
+<tr><td>9</td><td><code>unlimited</code></td><td><code>unlimited</code></td></tr>
+</tbody></table></div>
+<h3 id="enum-Location"><code>Location</code></h3>
+<p class="meta">a member this reader does not know is <code>refuse</code></p>
+<div class="wrap"><table>
+<thead><tr><th>id</th><th>member</th><th>wire</th></tr></thead>
+<tbody>
+<tr><td>2</td><td><code>machine</code></td><td><code>machine</code></td></tr>
+<tr><td>3</td><td><code>user</code></td><td><code>user</code></td></tr>
+<tr><td>4</td><td><code>process</code></td><td><code>process</code></td></tr>
+</tbody></table></div>
+<h3 id="enum-KeyState"><code>KeyState</code></h3>
+<p class="meta">a member this reader does not know is <code>grant</code></p>
+<div class="wrap"><table>
+<thead><tr><th>id</th><th>member</th><th>wire</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>set</code></td><td><code>set</code></td></tr>
+<tr><td>2</td><td><code>default</code></td><td><code>default</code></td></tr>
+<tr><td>3</td><td><code>locked</code></td><td><code>locked</code></td></tr>
+<tr><td>4</td><td><code>ignored</code></td><td><code>ignored</code></td></tr>
+<tr><td>5</td><td><code>pending</code></td><td><code>pending</code></td></tr>
+</tbody></table></div>
+<h3 id="enum-ApplyMode"><code>ApplyMode</code></h3>
+<p class="meta">a member this reader does not know is <code>refuse</code></p>
+<div class="wrap"><table>
+<thead><tr><th>id</th><th>member</th><th>wire</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>live</code></td><td><code>live</code></td></tr>
+<tr><td>2</td><td><code>restart</code></td><td><code>restart</code></td></tr>
+</tbody></table></div>
+<h3 id="enum-KeyRefusalReason"><code>KeyRefusalReason</code></h3>
+<p class="meta">a member this reader does not know is <code>refuse</code></p>
+<div class="wrap"><table>
+<thead><tr><th>id</th><th>member</th><th>wire</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>not_granted</code></td><td><code>not_granted</code></td></tr>
+<tr><td>2</td><td><code>unknown_key</code></td><td><code>unknown_key</code></td></tr>
+</tbody></table></div>
+<h3 id="enum-ReadOutcome"><code>ReadOutcome</code></h3>
+<p class="meta">a member this reader does not know is <code>refuse</code></p>
+<div class="wrap"><table>
+<thead><tr><th>id</th><th>member</th><th>wire</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>read</code></td><td><code>read</code></td></tr>
+<tr><td>2</td><td><code>corrupt</code></td><td><code>corrupt</code></td></tr>
+<tr><td>3</td><td><code>not_permitted</code></td><td><code>not_permitted</code></td></tr>
+<tr><td>4</td><td><code>unavailable</code></td><td><code>unavailable</code></td></tr>
+<tr><td>5</td><td><code>invalid</code></td><td><code>invalid</code></td></tr>
+<tr><td>6</td><td><code>forbidden</code></td><td><code>forbidden</code></td></tr>
+</tbody></table></div>
+<h3 id="enum-IgnoredFieldReason"><code>IgnoredFieldReason</code></h3>
+<p class="meta">a member this reader does not know is <code>grant</code></p>
+<div class="wrap"><table>
+<thead><tr><th>id</th><th>member</th><th>wire</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>unknown_key</code></td><td><code>unknown_key</code></td></tr>
+<tr><td>2</td><td><code>invalid_name</code></td><td><code>invalid_name</code></td></tr>
+</tbody></table></div>
+<h3 id="enum-ReplaceOutcome"><code>ReplaceOutcome</code></h3>
+<p class="meta">a member this reader does not know is <code>refuse</code></p>
+<div class="wrap"><table>
+<thead><tr><th>id</th><th>member</th><th>wire</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>applied</code></td><td><code>applied</code></td></tr>
+<tr><td>2</td><td><code>conflict</code></td><td><code>conflict</code></td></tr>
+<tr><td>3</td><td><code>not_permitted</code></td><td><code>not_permitted</code></td></tr>
+<tr><td>4</td><td><code>invalid</code></td><td><code>invalid</code></td></tr>
+<tr><td>5</td><td><code>unavailable</code></td><td><code>unavailable</code></td></tr>
+<tr><td>6</td><td><code>corrupt</code></td><td><code>corrupt</code></td></tr>
+<tr><td>7</td><td><code>forbidden</code></td><td><code>forbidden</code></td></tr>
+</tbody></table></div>
+<h3 id="enum-ObservationOutcomeV2"><code>ObservationOutcomeV2</code></h3>
+<p class="meta">a member this reader does not know is <code>refuse</code></p>
+<div class="wrap"><table>
+<thead><tr><th>id</th><th>member</th><th>wire</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>changed</code></td><td><code>changed</code></td></tr>
+<tr><td>2</td><td><code>unchanged</code></td><td><code>unchanged</code></td></tr>
+<tr><td>3</td><td><code>gap</code></td><td><code>gap</code></td></tr>
+<tr><td>4</td><td><code>unavailable</code></td><td><code>unavailable</code></td></tr>
+<tr><td>5</td><td><code>unsupported</code></td><td><code>unsupported</code></td></tr>
+<tr><td>6</td><td><code>invalid</code></td><td><code>invalid</code></td></tr>
+<tr><td>7</td><td><code>not_permitted</code></td><td><code>not_permitted</code></td></tr>
+<tr><td>8</td><td><code>corrupt</code></td><td><code>corrupt</code></td></tr>
+<tr><td>9</td><td><code>forbidden</code></td><td><code>forbidden</code></td></tr>
+<tr><td>10</td><td><code>failed</code></td><td><code>failed</code></td></tr>
+</tbody></table></div>
 <h2 id="constants">Constants <span class="tag">[DEF-A6]</span></h2>
 <div class="wrap"><table>
 <thead><tr><th>name</th><th>type</th><th>value</th></tr></thead>
 <tbody>
 <tr><td><code>reader_error_codes</code></td><td><code>list&lt;string&gt;</code></td><td><code>storage_unavailable, caller_unavailable, identity_required, wrong_user</code></td></tr>
 <tr><td><code>editor_error_codes</code></td><td><code>list&lt;string&gt;</code></td><td><code>invalid_revision, storage_unavailable, caller_unavailable, identity_required, wrong_user</code></td></tr>
+<tr><td><code>resource_actions</code></td><td><code>list&lt;string&gt;</code></td><td><code>abstraction.config/key.read, abstraction.config/user.replace</code></td></tr>
 </tbody></table></div>
 <h2 id="refusals">Refusal words <span class="tag">[DEF-R1]</span></h2>
 <div class="wrap"><table>
@@ -198,7 +529,9 @@
 <tr><td>7</td><td><code>unknown_field</code></td><td><code>structure</code></td></tr>
 <tr><td>8</td><td><code>missing_field</code></td><td><code>structure</code></td></tr>
 <tr><td>9</td><td><code>bad_enum</code></td><td><code>structure</code></td></tr>
-<tr><td>10</td><td><code>trailing_bytes</code></td><td><code>document</code></td></tr>
+<tr><td>10</td><td><code>bad_value</code></td><td><code>structure</code></td></tr>
+<tr><td>11</td><td><code>encoded_size</code></td><td><code>structure</code></td></tr>
+<tr><td>12</td><td><code>trailing_bytes</code></td><td><code>document</code></td></tr>
 </tbody></table></div>
 
 <footer>

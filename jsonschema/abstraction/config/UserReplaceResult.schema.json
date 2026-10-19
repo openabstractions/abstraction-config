@@ -1,0 +1,73 @@
+{
+  "$defs": {
+    "UserSettings": {
+      "additionalProperties": false,
+      "properties": {
+        "log_service": {
+          "type": "string"
+        },
+        "log_sink": {
+          "type": "string"
+        },
+        "nas_store": {
+          "type": "string"
+        },
+        "off": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "store": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "nas_store",
+        "store",
+        "log_sink",
+        "log_service",
+        "off"
+      ],
+      "type": "object"
+    },
+    "UserSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "revision": {
+          "type": "string"
+        },
+        "values": {
+          "$ref": "#/$defs/UserSettings"
+        }
+      },
+      "required": [
+        "values",
+        "revision"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "outcome": {
+      "enum": [
+        "applied",
+        "conflict",
+        "forbidden",
+        "unavailable"
+      ],
+      "type": "string"
+    },
+    "snapshot": {
+      "$ref": "#/$defs/UserSnapshot"
+    }
+  },
+  "required": [
+    "outcome",
+    "snapshot"
+  ],
+  "title": "UserReplaceResult",
+  "type": "object"
+}

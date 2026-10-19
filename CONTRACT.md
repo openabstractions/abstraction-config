@@ -1,21 +1,30 @@
 # abstraction.config contract
 
+Remote profile: the current service methods retain `local` (explicit or
+default); the general paired listener does not offer this capability. Retained
+capability-specific delegation keeps its existing contract and is separate
+from that listener. Held by: `idl/gen/service_test.go`
+(`TestDispatcherTableCarriesRemoteProfile`) and `serve/runtime_remote_test.go`
+(`TestRemoteRuntimeDescribeUsesLiveGrantAndExplicitServices`).
+
 Binds: `config.thrift`
 
 `config.thrift` defines `abstraction.config/reader@1`, which reads
 machine, user and process settings with per-key provenance;
-`abstraction.config/editor@1`, which lets a same-account, Program-proven
+`abstraction.config/editor@1`, which lets a same-account, [Program](https://openabstractions.github.io/reference.html#concept-identity.listener-program-need)-proven
 caller replace the user location's settings under a compared revision; and
 `abstraction.config/observer@1`, which long-polls the latest effective
 snapshot. A caller of the legacy file provider calls
-`LoadWithOverrides(values)` with its run overrides and is told what tiers
-this machine has. It is never told how to find them, and it is never
+`LoadWithOverrides(values)` with its run overrides and is told what job
+stores and log sinks this machine has. It is never told how to find them, and it is never
 separately configured: there is one settings step per machine, performed by
-whoever installs a tier, and zero per application.
+whoever installs one, and zero per application.
 [README.md](README.md) is the door — what this module is, how to obtain it,
 one example that runs. That page cites rules by their ids and defines none.
 
 ## Reading this page
+
+The conventions every OA contract carries are stated once in [CONVENTIONS.md](https://github.com/openabstractions/abstractions/blob/main/idl/CONVENTIONS.md); a rule here that applies one cites its `CONV-` id.
 
 The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD",
 "SHOULD NOT", "RECOMMENDED", "MAY" and "OPTIONAL" in this page are to be
@@ -35,22 +44,23 @@ records and what was measured or tested, linked from here and linking back.
 | T | trust — the machine location's ownership check |
 | S | schema — the settings schema |
 | P | provenance — which location and path answered each key |
+| A | admission — declared actions and request authority |
 | E | error and outcome — the outcome words a call can return |
 | X | extension — what may be added to the schema |
 
 | Prose | Wire (until its own release) |
 | --- | --- |
-| location, values `machine`, `user`, `process` | `Origin.rung`, values `machine`, `user`, `environment`; the `RunOverrides` struct (`reader@2`, `editor@2`, `research/vocabulary/RENAME-PLAN.md` §4 "second") |
+| location, values `machine`, `user`, `process` | `Origin.rung`, values `machine`, `user`, `environment`; the `RunOverrides` struct (`reader@2`, `editor@2`, in the 0.8.0 plan's W2-03 window; `research/vocabulary/RENAME-PLAN.md` N14) |
 
 [testdata/scenarios/rules.tsv](testdata/scenarios/rules.tsv) is the
 accounting for the legacy file provider's rules: every tag with the
 scenarios that reach it, or the reason it is unreached. Full accounting,
 never full coverage — a rule no sequence of driver operations can detect
 says so there with its reason, and a rule nothing implements yet says
-that. `go/corpus_test.go` and `python/test_corpus.py` read the scenarios
-beside that file and compare each language's transcript with the recorded
-`.expected` byte for byte, so the two languages agree through it; the same
-tests refuse a tag no rule names and a covered rule no expectation cites.
+that. `go/corpus_test.go` reads the scenarios beside that file and compares its
+transcript with the recorded `.expected` byte for byte; it refuses a tag no
+rule names and a covered rule no expectation cites. Generated Python clients
+use this Go service through the shared native binding.
 That corpus holds [CFG-R1], [CFG-R2], [CFG-P1], [CFG-P2], [CFG-T1]
 through [CFG-T4], [CFG-W1] through [CFG-W4], [CFG-S1] and [CFG-X1]; the
 editor service's rules, [CFG-W5] through [CFG-W15], are held by
@@ -62,13 +72,13 @@ rule here is a defect in one of the two.
 A location is one of the three ranked sources a setting can come from:
 machine, user or process (the environment).
 
-**[CFG-R1] The nearer location wins: process over user over machine.** The
-service MUST resolve each key from the nearest location that answered it:
-process, then user, then machine. The process location MUST be the
-environment. The user location MUST beat the machine location, so a user
-can opt out of what an administrator turned on without needing an
-administrator, except a retention key ([CFG-R4]): the administrator owns
-the disk.
+**[CFG-R1] The nearer location wins: process over user over machine.**
+For @2 the service MUST resolve user over machine. The generated client MUST
+apply explicit process values after the service answer, under the same typed
+catalogue validation. A trusted machine lock ([CFG-R4]) MUST survive that
+overlay. No process values cross the @2 wire or enter its observation cursor.
+For published @1, the service continues to resolve caller-supplied
+`RunOverrides` over user over machine. Empty overrides leave farther values.
 
 **[CFG-R2] A site location is reserved and absent.** Every ancestor has one
 and the service MUST NOT implement it. The name is spent rather than free,
@@ -86,8 +96,7 @@ because a setting is inherited by the process it would constrain.
 subscription MUST report the answer when it differs, from whichever process
 wrote it, and MUST name its mechanism. A platform that must be asked on a
 timer MUST say so rather than hiding it in a latency. Held over wall time
-and across processes by `abstraction-config/go/watch_test.go` and
-`abstraction-config/python/test_abstraction_config.py`; a transcript
+and across processes by `abstraction-config/go/watch_test.go`; a transcript
 compared byte for byte carries neither, so the corpus reaches the
 comparison half only, as [CFG-W2].
 
@@ -120,7 +129,8 @@ the same four strings and `off` map as settings.
 
 **[CFG-W6] The user backing file is chosen, not supplied.** The service
 MUST select its user-location path at startup; no request MUST supply that
-path.
+path. The service MUST create that path's directory before observing, so a
+profile with no configuration directory is observable.
 
 **[CFG-W7] Reading the user location.** `ReadUser` MUST return user values
 and an opaque normalized-content revision, excluding the machine and
@@ -134,6 +144,10 @@ the current user content and MUST NOT write. An empty expected revision
 MUST return `invalid_revision`. A storage failure MUST return
 `storage_unavailable`. A match MUST return `applied` with the written
 snapshot.
+
+For `config@2`, only `applied` and `conflict` MUST carry `UserSnapshotV2`.
+Every other outcome MUST omit the snapshot and disclose no user state,
+including `forbidden` and `not_permitted`.
 
 **[CFG-W9] Clearing a user override.** An empty string or an empty `off`
 map MUST remove the corresponding user override. Farther locations MUST
@@ -159,6 +173,9 @@ cancelled wait MUST NOT grant a write retry; the caller MUST reread and
 reconcile an uncertain replacement before a new edit. The Go reader,
 editor and observer MUST wait `client.DefaultTimeout`, two seconds, per
 call unless the transport or the call's context sets another limit. An
+observation call MUST wait its `wait_ms` plus `client.ObserveMargin`, five
+seconds, whenever the transport's limit is shorter
+(`TestObserveCallLimitCoversItsWait`). An
 edit policy decision MUST answer within that wait: the installed runtime
 bounds it to 500 ms and MUST answer `unavailable` past it.
 
@@ -178,12 +195,14 @@ envelope within the shared 1 MiB config frame budget. Both a CAS read and
 a proposed replacement MUST enforce the bound. Oversized storage MUST
 return `storage_unavailable`, and no partial replacement is written.
 
-## The machine location is trusted by ownership
+## The machine location is trusted when an administrator wrote it
 
-**[CFG-T1] The machine location is read only when trusted by ownership.**
-The service MUST read the machine location only when an administrator owns
-the file and its directory, and MUST ignore an untrusted file rather than
-obey it. A machine-wide file an ordinary process could write is a
+**[CFG-T1] The machine location is read only when an administrator wrote it.**
+The service MUST read the machine location only when the file passes
+storage's `STO-L4` (`abstraction-storage/CONTRACT.md`), the one text of
+the machine trust rule: the file and every folder from it up to the machine
+root are owned by, and writable only by, an administrator. It MUST ignore
+an untrusted file rather than obey it. A machine-wide file an ordinary process could write is a
 machine-wide file anyone could write, so it does not get to speak for the
 machine. Ignored is not deleted: the file stays where it is.
 
@@ -219,36 +238,62 @@ answer is wrong.
 
 ## The schema
 
-**[CFG-S1] An unnamed key is ignored today, not refused.** The service
-MUST ignore a key the schema does not name; refusing it is
-[Not built](#not-built). The schema's home MUST be this module's one
-definition in the IDL profile, the same way `abstraction-job/job.thrift`
-is the job module's.
+**[CFG-S1] Unknown fields cannot erase future settings.** The deprecated
+projection MUST ignore unnamed user-record fields when reading and preserve
+them when replacing its five fields. Typed edits MUST refuse an unknown
+catalogue key. A parseable known stored value of the wrong kind or outside
+its bounds MUST resolve to its default with `ignored` and `invalid_value`.
+Other valid keys continue to resolve. An unparseable record is `corrupt`
+with the zero-based first failing byte offset; outcome qualifies offset zero.
+Unknown stored members have bounded display diagnostics: at most sixteen
+sanitized name excerpts and offsets, with a count of omitted diagnostics.
+Excerpts are never keys or selectors. Untouched unknown member bytes MUST be
+spliced into the same CAS edit; whole-file layout need not be preserved.
+The wire schema lives in `config.thrift`; its key catalogue lives in the
+single sibling `keys.json`, validated against `KeyDescriptor` when bindings
+are generated.
 
-**[CFG-X1] No secret and no policy is a setting.** Nobody is refused a
-read and nothing needs to be, because this module carries pointers to
-tiers and limits the service enforces. A key that would need a read
-restriction is in the wrong module. This is a rule about what may be
-added to the schema rather than about any answer, so no sequence of calls
-can detect it.
+The unpublished @2 catalogue retires `prompt_cache_max_retention` and
+`prompt_cache_off_for` before 0.8.0 publication (owner 2026-11-05 D2;
+coordinator 664/669). They are unknown keys, and any stored member bytes remain
+preserved under CFG-S2's ordinary unknown-member rule. `prompt_cache_persist`
+and `prompt_cache_max_use` remain catalogue entries for the accepted future
+conversation-memory design; 0.8.0 has no consumer and offers neither control.
+The existing engine-profile RAM cache and its fixed defaults are unchanged.
+
+`model_context` maps a local model family to the person's per-conversation
+context in decimal tokens; an absent family is Automatic (architect decision D,
+2026-11-08). The Panel's Models page writes it. modelhostd reads it at each load
+as a designated provider whose facet names the key (CFG-X1), watches it, and
+unloads a loaded model of a changed family once no request uses it. The runtime
+reads it for the inventory's per-conversation context. modelhostd logs a
+refused read.
+
+**[CFG-X1] Values carry no secret; delivery to a provider is a grant.** A
+runtime-designated provider reads only its exact registered keys under
+`abstraction.config/key.read`. Native receiving-peer and registration evidence
+MUST establish designation; a supplied provider name or role is not proof.
+Absent native designation MUST refuse. Ordinary application read gating is
+deferred; settings never contain credentials or permission decisions.
+A key read never raises a question; a read without a rule is refused.
+A remote or paired peer's key read keeps the ordinary decision path.
 
 ## Provenance
 
-**[CFG-P1] Every answer carries provenance per key: a location and a
-path, or `environment`, or `default`.** Provenance MUST be reported per
-key and not per struct. A machine that sets `nas_store` in the machine
-file and `store` in the user file has two answers from two authorities,
-and one string for the whole settings document can only name one of them
-— a person who cannot work out why their downloads are going somewhere
-unexpected needs the file that says so for the key they asked about.
+**[CFG-P1] Every answer carries provenance per key.** @2 provenance MUST
+identify the location and diagnostic path that answered, with state and any
+shadowed settings. A default answer MUST have no location and an empty path;
+`KeyState.default` identifies it. Published @1 keeps its `rung` and `default`
+provenance words.
 
-A key nothing set MUST report the `default` location. That is an answer,
-not a missing one: absent means this machine does not have that tier,
-which is normal.
+| Prose | Published @1 wire | @2 wire |
+| --- | --- | --- |
+| location | `Origin.rung` | `KeyOrigin.location` |
+| process | `run` / `RunOverrides` | `process`, applied by the generated client |
+| default | `default` location | absent location, `KeyState.default` |
 
 **[CFG-P2] The path half of provenance names the file that answered.**
-Held by `abstraction-config/go/config_test.go` and
-`abstraction-config/python/test_abstraction_config.py` rather than by the
+Held by `abstraction-config/go/config_test.go` rather than by the
 corpus: a path is one machine's, so no transcript two machines compare
 byte for byte can carry it.
 
@@ -266,7 +311,7 @@ applying the proposed one; `applied` MUST carry the written snapshot.
 | `Read`, `ReadUser` | `caller_unavailable` | The caller's account could not be established. |
 | `Read`, `ReadUser` | `identity_required` | The transport carries no identity to check. |
 | `Read`, `ReadUser` | `wrong_user` | The caller does not own the service's account. |
-| `Read` | `storage_unavailable` | A trusted machine or user file could not be read (CFG-T1, CFG-T3). |
+| `Read` | `storage_unavailable` | A trusted machine or user file could not be read (CFG-T1, CFG-T3). A user file that reads but does not parse answers as an empty user location. The merged loader refuses trusted machine-source I/O errors before returning settings. |
 | `ReadUser` | success | Returns user values and a revision (CFG-W7). |
 | `ReadUser` | `storage_unavailable` | Unreadable, corrupt or unsupported storage; missing storage is empty values, not this outcome (CFG-W7). |
 | `ReplaceUser` | `applied` | The compared revision matched; returns the written snapshot (CFG-W8). |
@@ -289,9 +334,108 @@ applying the proposed one; `applied` MUST carry the written snapshot.
 | persisted editor record | at most 256 KiB | CFG-W15 |
 | config wire frame | at most 1 MiB (shared) | CFG-W15 |
 | Go client per-call wait | 2 seconds (`client.DefaultTimeout`) | CFG-W12 |
+| Go observation call wait | `wait_ms` + 5 seconds (`client.ObserveMargin`) | CFG-W12 |
 | edit policy decision | at most 500 ms | CFG-W12 |
 
+## Typed settings (`reader@2`, `editor@2`, `observer@2`)
+
+**[CFG-R4] Trusted machine locks.** A catalogue `lockable` key set in the
+existing administrator-trusted machine file MUST win over user and process
+values. An unset machine value falls through. An untrusted machine file
+confers no lock. Provenance names `machine`, `locked`, its diagnostic path
+and shadowed locations; an edit of a locked key is `not_permitted` with
+`locked:machine`. External Group Policy and MDM are deferred.
+
+**[CFG-S2] Typed catalogue entries.** Keys are `Entry` values described by
+`KeyDescriptor`, never record fields. `Value.kind` selects one payload;
+nonselected payloads MUST be zero. A selected zero/false/empty payload is a
+value, while absent `Entry.value` or `Change.set` is unset. `unlimited` carries
+no payload and is admitted only by `allows_unlimited`; zero never means
+unlimited. All five generated
+bindings expose the same catalogue and generic atomic process overlay.
+
+`Read(names)` returns effective service entries without process overrides.
+Unknown requested names are refused as `unknown_key`; ungranted names are
+`not_granted`, never unset entries. The generated process overlay validates
+the whole batch, retains machine locks and never inserts an omitted key.
+`Describe` supplies catalogue metadata, including bounds, choices, presets,
+default, lockability and live/restart apply mode. `logs_max_use` has a runtime
+default supplied by logging's existing drive policy; its description is
+"10% of the drive, at most 4 GB".
+
+Ignored document fields are reported only to callers admitted for every
+catalogue key. A key-scoped reader's revision excludes those diagnostics.
+Each ignored field identifies its actual `ConfigSource` location and path.
+A corrupt effective read carries `corrupt_source`; user-only results have
+the selected user source implicitly. `corrupt_offset` is meaningful only
+under `corrupt`, including omitted offset zero. Native producers emit zero
+under every other outcome.
+
+Only `cache_max_use`, `cache_max_retention`, `logs_max_use` and
+`logs_max_retention` allow unlimited values. Duration bounds fit the existing
+retention owners' representation; consumers still perform checked conversion.
+
+`ReadUser` and `ReplaceUser(expected_revision, changes)` use the same direct
+CAS record as @1. A batch sets or explicitly unsets all requested keys or
+none. A conflict returns the current user snapshot; its revision is distinct
+from the effective read revision. @1 replacement changes only its five
+deprecated fields and preserves every new and unknown raw field. The @2 public
+`disabled_download_delegates` key projects the existing native `off` reason
+map; there is one stored map, with unchanged @1 projection.
+
+The observer uses the existing native invalidation source and bounded wait
+gate. A lock or pending-state change changes the effective revision. A restart
+key differing from the consumer's actually admitted startup snapshot is
+`pending`; neither process overrides nor caller-supplied claims enter its
+cursor. There is no periodic polling, revision-history store or restore API.
+The lazy NAS executor publishes its admitted value after successful share
+preparation. That publication invalidates the same native observation gate.
+The cursor also binds a corrupt or unavailable effective read. Repeating that
+cursor waits on native invalidation, and a repaired source yields a new
+snapshot; a consumer needs no polling loop to wait for repair.
+
+The published @1 records and services remain unchanged. @2 uses new records,
+including `KeyOrigin`, and the typed profiles; it does not widen @1 closed
+records or add `RunOverrides` to the new wire surface.
+
+
+**[CFG-A1] The action catalogue is closed.** The IDL `resource_actions`
+catalogue MUST contain every action of this service. `abstraction.config/key.read`
+authorizes an exact named-key read; `abstraction.config/user.replace`
+authorizes the atomic user edit. Metadata grants no access. Unknown actions
+MUST refuse. Both retain `abstraction.rights/legacy-exact-string@1` until a
+typed key profile has its own accepted contract.
+
+**[CFG-S3] Describe returns one bounded catalogue.** `DescribeResult` MUST
+carry `read` and at most 64 descriptors, or a refusing outcome with no
+descriptors. The catalogue is a definition-owned constant. Its fixed bound
+is the declared CONV-L1 divergence below.
+
+**[CFG-E4] Typed outcomes and refusals.** @2 call outcomes MUST refuse unknown
+words (CONV-E1). A boundary identity refusal is `forbidden` with identity
+`RefusalDetail`; an evaluated rule refusal is `not_permitted` with Rights
+detail. A per-key `not_granted` MUST carry that detail when the Rights rule
+refuses a designated reader. When no registration designates the reader for
+the key (CFG-X1), because its registration names no such key or its kept
+image does not match, the per-key `not_granted` MUST carry identity detail
+with decision `not_granted` instead
+(`TestTypedReadNamesAMissingDesignationApartFromAMissingRule`).
+`unknown_key` carries none. Machine locks retain `KeyProblem` with `locked:machine`.
+
+**[CFG-W16] Typed observation follows CONV-O1.** A new revision returns
+`changed` and its snapshot; expiry at the same good revision returns
+`unchanged`. A read failure returns `unavailable`, retaining the latest
+snapshot for the caller's current visibility with `age_ms` when one exists.
+Retained values MUST be authorized again before delivery. The service keeps
+at most 64 current visibility snapshots in memory. Eviction yields no retained
+snapshot and absent age. Failure of native notification returns `failed` with
+cause `notification_source_failed`; the consumer ends its observation.
+
 ## Divergences
+
+- **CFG-S3 / CONV-L1.** Describe returns the complete constant catalogue,
+  bounded to 64 descriptors and 256 KiB, in one reply. Paging adds no
+  visibility or memory bound to this definition-owned finite list.
 
 - **CFG-P2.** The file lives at the platform's settings directory —
   `%AppData%`, `~/Library/Application Support`, `$XDG_CONFIG_HOME`
@@ -304,23 +448,19 @@ applying the proposed one; `applied` MUST carry the written snapshot.
 
 ## Not built
 
-- [CFG-S1] Refusing an unknown key. Both implementations ignore one
-  today instead.
+- C++ observation: the C++ facade resolves `reader@1` and `editor@1` and
+  has no typed `observer@1` client.
+- The remote form. An application reaching this service on another
+  machine's runtime has no binding. When it is built, a remote receiver
+  MUST refuse every request that needs a person with the outcome `forbidden`
+  (`ReplaceUser`'s refusal, CFG-W11) and the reason "no person reachable on
+  this runtime", until remote questions exist. A forwarded
+  caller is the forwarding runtime's certificate subject; the agent behind
+  it is an unverified label.
 
-### Next major (`reader@2`, `editor@2`, `observer@2`)
 
-**[CFG-R4] Locked retention key.** A retention key set at the machine
-location MUST win over the user location; an unset machine value MUST
-answer from the user location. This is the reversal [CFG-R1] otherwise
-forbids, reserved for these five keys alone.
-
-**[CFG-S2] Retention keys.** The schema gains five optional keys, absent
-as default: `cache_max_use`, `cache_max_retention`, `tmp_max_retention`,
-`logs_max_use` and `logs_max_retention`.
-
-`Snapshot`, `Origins` and `RunOverrides` refuse an unknown field
-(`config.thrift`), so five new fields are a version, not an addition:
-[CFG-R4] and [CFG-S2] land together at `reader@2`, `editor@2` and
-`observer@2`, carrying [CFG-R1]'s location values beside them
-(`research/storage-classes/DECISION.md` §8,
-`research/vocabulary/RENAME-PLAN.md` §4 "second").
+- A typed `config-key@1` Rights resource profile remains pending.
+- `nas_store` remains provider settings pending the delegate/share design.
+- Cache and prompt retention/application consumers require their owning runtime
+  implementations; catalogue declarations alone do not activate them.
+- Remote provenance must omit local diagnostic paths when a remote form ships.

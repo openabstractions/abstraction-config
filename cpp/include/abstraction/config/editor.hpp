@@ -29,8 +29,8 @@ public:
  }
 private:
  ipc::FrameTransport make_transport() const {
-  auto transport=deadline_?ipc::FrameTransport(endpoint_,*deadline_,1<<20)
-                          :ipc::FrameTransport(endpoint_,2000,1<<20);
+  auto transport=deadline_?ipc::FrameTransport(endpoint_,*deadline_,ipc::kDefaultMaxFrame)
+                          :ipc::FrameTransport(endpoint_,2000,ipc::kDefaultMaxFrame);
   return transport.with_cancellation(cancellation_).with_server_expectation(server_);
  }
  std::string endpoint_;
